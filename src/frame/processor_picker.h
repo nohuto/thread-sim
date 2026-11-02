@@ -52,4 +52,4 @@ std::optional<PickerSelection> ShowProcessorPicker(HWND owner, const PickerOptio
 void SetDevProcessorGroups(uint16_t count);
 #endif
 
-} // namespace thread_sim::frame
+}

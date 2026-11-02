@@ -12,7 +12,9 @@
 
 #include "platform/environment.h"
 
-#include <shobjidl.h>
+#include <win32ui/dialog/file_dialog.h>
+#include <win32ui/system/paths.h>
+#include <win32ui/system/strings.h>
 
 namespace thread_sim::frame
 {
@@ -20,63 +22,21 @@ namespace thread_sim::frame
 using namespace ui;
 using namespace window_detail;
 
-std::optional<std::wstring> window_detail::FileDialog(HWND owner, bool save, const wchar_t* title, const wchar_t* filter_name, const wchar_t* filter_spec, const wchar_t* extension, const std::wstring& initial_name, const std::wstring& folder)
+std::optional<std::wstring> window_detail::FileDialog(HWND owner, bool save, const wchar_t* title, const wchar_t* filter, const std::wstring& initial_name, const std::wstring& folder)
 {
-    IFileDialog* dialog = nullptr;
-    if (FAILED(CoCreateInstance(save ? CLSID_FileSaveDialog : CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog))))
+    std::wstring path;
+    const win32ui::FileDialogSpec spec = {.filter = filter, .title = title, .initial_name = initial_name, .folder = folder};
+    const DWORD error = save ? win32ui::ChooseFileToSave(owner, spec, &path) : win32ui::ChooseFileToOpen(owner, spec, &path);
+    if (error == ERROR_SUCCESS)
     {
-        return std::nullopt;
+        return path;
     }
-    const COMDLG_FILTERSPEC filters[] = {{filter_name, filter_spec}, {L"All files", L"*.*"}};
-    dialog->SetFileTypes(2, filters);
-    dialog->SetTitle(title);
-    dialog->SetDefaultExtension(extension);
-    DWORD options = 0;
-    dialog->GetOptions(&options);
-    dialog->SetOptions(options | FOS_FORCEFILESYSTEM | (save ? FOS_OVERWRITEPROMPT : FOS_FILEMUSTEXIST));
-    if (!initial_name.empty())
+    if (error != ERROR_CANCELLED)
     {
-        dialog->SetFileName(initial_name.c_str());
+        // Win32FromHResult keeps the bits of HRESULTs outside FACILITY_WIN32
+        ShowError(owner, title, L"The file dialog could not be shown.", (error & 0x80000000u) ? platform::HResultError(static_cast<HRESULT>(error), L"File dialog") : platform::Win32Error(error, L"File dialog"));
     }
-    if (!folder.empty())
-    {
-        IShellItem* item = nullptr;
-        if (SUCCEEDED(SHCreateItemFromParsingName(folder.c_str(), nullptr, IID_PPV_ARGS(&item))))
-        {
-            dialog->SetFolder(item);
-            item->Release();
-        }
-    }
-    std::optional<std::wstring> result;
-    const win32ui::ModalScope modal;
-    if (SUCCEEDED(dialog->Show(owner)))
-    {
-        IShellItem* item = nullptr;
-        if (SUCCEEDED(dialog->GetResult(&item)))
-        {
-            PWSTR path = nullptr;
-            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
-            {
-                result = path;
-                CoTaskMemFree(path);
-            }
-            item->Release();
-        }
-    }
-    dialog->Release();
-    return result;
-}
-
-std::wstring window_detail::DirectoryOf(const std::wstring& path)
-{
-    const size_t slash = path.find_last_of(L"\\/");
-    return slash == std::wstring::npos ? std::wstring() : path.substr(0, slash);
-}
-
-std::wstring window_detail::FileNameOf(const std::wstring& path)
-{
-    const size_t slash = path.find_last_of(L"\\/");
-    return slash == std::wstring::npos ? path : path.substr(slash + 1);
+    return std::nullopt;
 }
 
 bool MainWindow::ConfirmDiscard()
@@ -160,7 +120,7 @@ void MainWindow::OpenDocument(const std::wstring& path)
     config_ = loaded->config;
     saved_config_ = config_;
     document_path_ = path;
-    settings_.last_directory = DirectoryOf(path);
+    settings_.last_directory = win32ui::ParentDirectory(path);
     ResetThreadKeys();
     Revalidate();
     results_stale_ = snapshot_ != nullptr;
@@ -188,7 +148,7 @@ void MainWindow::OpenDocument(const std::wstring& path)
         spec.buttons = {{IDOK, L"OK"}};
         ui::ShowMessage(hwnd_, std::move(spec));
     }
-    SetStatusMessage(L"Opened " + FileNameOf(path));
+    SetStatusMessage(L"Opened " + win32ui::FileName(path));
 }
 
 bool MainWindow::SaveDocument(bool save_as)
@@ -196,13 +156,9 @@ bool MainWindow::SaveDocument(bool save_as)
     std::wstring path = document_path_;
     if (save_as || path.empty())
     {
-        const std::wstring suggested = (config_.name.empty() ? std::wstring(L"thread-sim-run") : config_.name) + L".jsonc";
-        std::wstring sanitized;
-        for (wchar_t ch : suggested)
-        {
-            sanitized.push_back(wcschr(L"\\/:*?\"<>|", ch) ? L'_' : ch);
-        }
-        const auto chosen = FileDialog(hwnd_, true, L"Save config", L"ThreadSim config (*.jsonc)", L"*.jsonc", L"jsonc", sanitized, settings_.last_directory);
+        const std::wstring name = win32ui::SafeFileName(config_.name);
+        const std::wstring suggested = (name.empty() ? std::wstring(L"thread-sim-run") : name) + L".jsonc";
+        const auto chosen = FileDialog(hwnd_, true, L"Save config", L"ThreadSim config (*.jsonc)\0*.jsonc\0All files\0*.*\0", suggested, settings_.last_directory);
         if (!chosen)
         {
             return false;
@@ -217,9 +173,9 @@ bool MainWindow::SaveDocument(bool save_as)
     }
     document_path_ = path;
     saved_config_ = config_;
-    settings_.last_directory = DirectoryOf(path);
+    settings_.last_directory = win32ui::ParentDirectory(path);
     UpdateTitle();
-    SetStatusMessage(L"Saved " + FileNameOf(path));
+    SetStatusMessage(L"Saved " + win32ui::FileName(path));
     return true;
 }
 
@@ -230,13 +186,13 @@ void MainWindow::ExportResults()
         return;
     }
     const std::wstring suggested = L"thread-sim-" + snapshot_->run_id + L".csv";
-    const auto chosen = FileDialog(hwnd_, true, L"Export results", L"CSV results (*.csv)", L"*.csv", L"csv", suggested, settings_.last_directory);
+    const auto chosen = FileDialog(hwnd_, true, L"Export results", L"CSV results (*.csv)\0*.csv\0All files\0*.*\0", suggested, settings_.last_directory);
     if (!chosen)
     {
         return;
     }
     std::wstring base = *chosen;
-    if (base.size() > 4 && _wcsicmp(base.c_str() + base.size() - 4, L".csv") == 0)
+    if (win32ui::HasFileExtension(base, L".csv"))
     {
         base.resize(base.size() - 4);
     }
@@ -244,9 +200,9 @@ void MainWindow::ExportResults()
     int existing_count = 0;
     for (const std::wstring& path : {base + L".csv", base + L".json"})
     {
-        if (_wcsicmp(path.c_str(), chosen->c_str()) != 0 && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES)
+        if (!win32ui::EqualsInsensitive(path, *chosen) && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES)
         {
-            existing += (existing.empty() ? L"" : L" and ") + FileNameOf(path);
+            existing += (existing.empty() ? L"" : L" and ") + win32ui::FileName(path);
             ++existing_count;
         }
     }
@@ -279,8 +235,8 @@ void MainWindow::ExportResults()
         ShowError(hwnd_, L"Export results", L"The results could not be exported.", status.error());
         return;
     }
-    settings_.last_directory = DirectoryOf(base);
-    SetStatusMessage(L"Exported " + FileNameOf(base) + L".csv and .json");
+    settings_.last_directory = win32ui::ParentDirectory(base);
+    SetStatusMessage(L"Exported " + win32ui::FileName(base) + L".csv and .json");
 }
 
-} // namespace thread_sim::frame
+}

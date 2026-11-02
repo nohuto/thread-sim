@@ -18,6 +18,13 @@
 namespace thread_sim::frame
 {
 
+struct DetailsContent
+{
+    const engine::ThreadConfig* requested = nullptr;
+    const engine::RunSnapshot* run = nullptr;
+    const engine::ThreadSnapshot* observed = nullptr;
+};
+
 class DetailsWindow final : public win32ui::DialogWindow
 {
   public:
@@ -29,8 +36,8 @@ class DetailsWindow final : public win32ui::DialogWindow
     {
         return thread_key_;
     }
-    bool Open(HWND owner);
-    void Show(const engine::ThreadConfig& requested, const engine::RunSnapshot* run, const engine::ThreadSnapshot* observed);
+    bool Open(HWND owner, const DetailsContent& content);
+    void Show(const DetailsContent& content);
 
   protected:
     void OnCreate() override;
@@ -42,20 +49,22 @@ class DetailsWindow final : public win32ui::DialogWindow
     }
 
   private:
-    using Row = std::array<std::wstring, 4>;
-
-    void SetRows(std::vector<Row> rows);
+    void SetRows(win32ui::TextRows rows);
+    bool MeasureColumns(bool keep);
     void FitColumns();
-    static int CALLBACK CompareRows(LPARAM left, LPARAM right, int column, void* context);
 
     uint64_t thread_key_ = 0;
+    // during Open only
+    const DetailsContent* opening_ = nullptr;
     std::wstring title_;
     HWND list_ = nullptr;
-    std::vector<Row> rows_;
+    win32ui::TextRows rows_;
     std::array<int, 4> wanted_ = {};
+    // dpi of wanted_, 0 = not measured yet
+    UINT wanted_dpi_ = 0;
     int sort_column_ = -1;
     bool sort_ascending_ = true;
     win32ui::SortKeys sort_earlier_;
 };
 
-} // namespace thread_sim::frame
+}

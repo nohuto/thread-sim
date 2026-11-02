@@ -18,12 +18,10 @@ namespace thread_sim::engine
 class ProcessThreadSampler
 {
   public:
-    // test override, default uses CPUID
     explicit ProcessThreadSampler(bool force_variable_counter = false);
     platform::Result<std::vector<OtherThreadSnapshot>> Sample(std::span<const uint32_t> exclude);
     std::vector<OtherThreadSnapshot> SampleFromSystemThreads(std::span<const uint32_t> exclude, std::span<const platform::SystemThread> threads, int64_t sample_qpc);
     size_t cached_handle_count() const;
-    // QPC ticks spent in the last system query only
     int64_t last_query_ticks() const;
 
   private:
@@ -53,4 +51,4 @@ class ProcessThreadSampler
     bool invariant_counter_;
 };
 
-} // namespace thread_sim::engine
+}

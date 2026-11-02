@@ -19,35 +19,13 @@ FetchContent_Declare(win32ui
 )
 FetchContent_MakeAvailable(win32ui)
 
-add_library(thread_sim_compile_settings INTERFACE)
-target_compile_features(thread_sim_compile_settings INTERFACE cxx_std_20)
-target_compile_definitions(thread_sim_compile_settings INTERFACE
-    UNICODE
-    _UNICODE
-    NOMINMAX
-    WIN32_LEAN_AND_MEAN
+win32ui_app_settings(thread_sim_compile_settings
     _WIN32_WINNT=0x0A00
     WINVER=0x0A00
     NTDDI_VERSION=0x0A00000C
     THREAD_SIM_VERSION_TEXT=L"${PROJECT_VERSION}"
     $<$<BOOL:${THREAD_SIM_DEV}>:THREAD_SIM_DEV=1>
 )
-if (MSVC)
-    target_compile_options(thread_sim_compile_settings INTERFACE
-        /W4
-        /sdl
-        /guard:cf
-        /utf-8
-    )
-    target_link_options(thread_sim_compile_settings INTERFACE
-        /GUARD:CF
-        /DEBUG
-        $<$<CONFIG:Release>:/CETCOMPAT>
-        $<$<CONFIG:Release>:/OPT:REF>
-        $<$<CONFIG:Release>:/OPT:ICF>
-        $<$<CONFIG:Release>:/PDBALTPATH:%_PDB%>
-    )
-endif()
 
 include(cmake/ThreadSimTarget.cmake)
 include(cmake/VerifyTargetGraph.cmake)
@@ -65,7 +43,7 @@ target_link_libraries(thread-sim PRIVATE
     thread_sim_ui
     thread_sim_platform
 )
-target_link_options(thread-sim PRIVATE /MANIFEST:NO)
+target_link_options(thread-sim PRIVATE /MANIFEST:NO /DEPENDENTLOADFLAG:0x800)
 set_property(TARGET thread-sim PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
 
 if (EXISTS "${PROJECT_SOURCE_DIR}/tests/unit/CMakeLists.txt")
@@ -75,9 +53,8 @@ endif()
 
 thread_sim_verify_layers(
     "platform:"
-    "records:platform"
-    "engine:records,platform"
+    "engine:platform"
     "ui:platform"
-    "frame:ui,engine,records,platform"
+    "frame:ui,engine,platform"
     "app:frame,ui,platform"
 )

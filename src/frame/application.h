@@ -26,4 +26,4 @@ struct AppOptions
 
 int RunApplication(HINSTANCE instance, const AppOptions& options, int show_command);
 
-} // namespace thread_sim::frame
+}

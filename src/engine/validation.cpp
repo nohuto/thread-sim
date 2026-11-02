@@ -170,7 +170,7 @@ void ValidateActivity(size_t index, const ActivityConfig& activity, Collector& o
     }
 }
 
-} // namespace
+}
 
 bool ValidationResult::HasErrors() const noexcept
 {
@@ -242,7 +242,7 @@ ValidationResult Validate(const RunConfig& run, const platform::Topology& topolo
     {
         const auto& thread = run.threads[index];
         const int number = static_cast<int>(index);
-        const std::wstring name = platform::Trim(thread.name);
+        const std::wstring name = win32ui::TrimWhitespace(thread.name);
         if (name.empty())
         {
             out.Thread(number, Field::kThreadName, L"Enter a thread name.");
@@ -269,4 +269,4 @@ ValidationResult Validate(const RunConfig& run, const platform::Topology& topolo
     return result;
 }
 
-} // namespace thread_sim::engine
+}

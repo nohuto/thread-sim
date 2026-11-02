@@ -75,4 +75,4 @@ struct ActivityRelevance
 };
 ActivityRelevance RelevanceOf(const ActivityConfig& activity, bool uses_shared_mutex);
 
-} // namespace thread_sim::engine
+}

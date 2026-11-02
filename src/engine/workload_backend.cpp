@@ -9,6 +9,8 @@
 #include "platform/clock.h"
 #include "platform/system_threads.h"
 
+#include <win32ui/system/worker.h>
+
 #include <algorithm>
 #include <array>
 #include <cerrno>
@@ -201,8 +203,9 @@ class Execution
         {
             WaitForSingleObject(context_.stop_event(), options_.setup_delay_ms);
         }
-        // a thread created in the foreground process starts with the foreground boost unless the process disables boosts,
-        // SetThreadPriorityBoost comes too late to remove it, so workers without boosts are created with process boosts off
+        // thread created in the foreground process starts with the foreground boost unless the process disables boosts,
+        // SetThreadPriorityBoost comes too late to remove it, so workers without boosts are created with process boosts
+        // off
         BOOL process_boost_disabled = FALSE;
         const bool restore_process_boost = GetProcessPriorityBoost(GetCurrentProcess(), &process_boost_disabled) != FALSE;
         struct RestoreProcessBoost
@@ -399,8 +402,8 @@ class Execution
         thread.suspended = true;
         observed.thread_id = id;
         thread.id = id;
-        const std::wstring name = L"ThreadSim thread " + std::to_wstring(thread.index + 1) + L": " + config.name;
-        const HRESULT named = SetThreadDescription(thread.handle.get(), name.c_str());
+        const std::wstring name = L"WorkerThread " + std::to_wstring(thread.index + 1) + L": " + config.name;
+        const HRESULT named = win32ui::NameThread(thread.handle.get(), name.c_str());
         if (FAILED(named))
         {
             observed.warning = platform::HResultError(named, L"SetThreadDescription").WithContext(identity).Describe();
@@ -472,7 +475,7 @@ class Execution
             return false;
         }
         waker_.reset(reinterpret_cast<HANDLE>(created));
-        base_.notices.push_back(L"ThreadSim waker runs at Time critical thread priority with priority boosts off and no explicit affinity.");
+        base_.notices.push_back(L"WakerThread runs at Time critical thread priority with priority boosts off and no explicit affinity.");
         return true;
     }
 
@@ -506,7 +509,7 @@ class Execution
 
     void WakeWorkers()
     {
-        const HRESULT named = SetThreadDescription(GetCurrentThread(), L"ThreadSim waker");
+        const HRESULT named = win32ui::NameThread(GetCurrentThread(), L"WakerThread");
         if (FAILED(named))
         {
             FailWaker(platform::HResultError(named, L"SetThreadDescription (waker)"));
@@ -548,7 +551,7 @@ class Execution
                 {
                     continue;
                 }
-                // a suspended or still pending worker cannot take a wake, posted messages would pile up in its queue
+                // suspended or still pending worker cannot take a wake, posted messages would pile up in its queue
                 const ThreadRunState state = thread.counters.state.load(std::memory_order_relaxed);
                 const bool takes_wake = context_.desired(thread.index) != ThreadRequest::kSuspend && state != ThreadRunState::kPending && state != ThreadRunState::kSuspending;
                 if (now >= entry.schedule.Boundary(entry.next))
@@ -814,7 +817,7 @@ class Execution
                 Fail(thread, platform::LastWin32Error(source == WakeSource::kEvent ? L"WaitForMultipleObjects (activity event)" : L"MsgWaitForMultipleObjectsEx (activity messages)"));
                 return false;
             }
-            // a signal left from a boundary the thread worked through ends the wait early and is not a wake
+            // signal left from a boundary the thread worked through ends the wait early and is not a wake
             if (signaled && woke >= boundary)
             {
                 thread.counters.wake.Record(static_cast<uint64_t>(QpcClock::TicksToMicroseconds(woke - boundary)));
@@ -1078,8 +1081,8 @@ class Execution
         }
     }
 
-    // thread cycles use time stamp counter ticks, measure their rate against QPC
-    // GetThreadTimes charges whole clock ticks and reports about half for 25ms bursts
+    // thread cycles use time stamp counter ticks, measure their rate against QPC, GetThreadTimes charges whole clock
+    // ticks and reports about half for 25ms bursts
     void MeasureCycleRate()
     {
         const int64_t now = QpcClock::Now();
@@ -1185,8 +1188,8 @@ class Execution
                 FILETIME created{}, exit{}, kernel{}, user{};
                 if (GetThreadTimes(thread.handle.get(), &created, &exit, &kernel, &user))
                 {
-                    observed.kernel_time_100ns = platform::FileTimeTo100ns(kernel);
-                    observed.user_time_100ns = platform::FileTimeTo100ns(user);
+                    observed.kernel_time_100ns = platform::FileTimeTicks(kernel);
+                    observed.user_time_100ns = platform::FileTimeTicks(user);
                 }
                 else
                 {
@@ -1197,8 +1200,8 @@ class Execution
                 {
                     const int64_t now = QpcClock::Now();
                     observed.cycles_total = cycles;
-                    // samples just after start or acknowledgement are too short for a share
-                    // extend the interval until a sample at least 50ms later
+                    // samples just after start or acknowledgement are too short for a share, extend the interval until
+                    // a sample at least 50ms later
                     const bool long_enough = now - thread.last_qpc >= QpcClock::Frequency() / 20;
                     if (thread.last_cycles && long_enough)
                     {
@@ -1223,8 +1226,8 @@ class Execution
             }
             else if (!joining_)
             {
-                // threads ending during the run used no CPU in this interval
-                // threads running to the end keep their last interval share
+                // threads ending during the run used no CPU in this interval, threads running to the end keep their
+                // last interval share
                 observed.cycles_delta = 0;
                 if (base_.cycle_counter_hz)
                 {
@@ -1462,7 +1465,7 @@ class Execution
         }
         if (thread)
         {
-            // a failed setting keeps its previous value, so asking for it again retries it
+            // failed setting keeps its previous value, so asking for it again retries it
             const auto failed_setting = [&](std::wstring_view setting) { return std::find(failed.begin(), failed.end(), setting) != failed.end(); };
             thread->requested_scheduling = request.scheduling;
             thread->requested_affinity = affinity;
@@ -1724,11 +1727,11 @@ class WorkloadBackend final : public Backend
     WorkloadOptions options_;
 };
 
-} // namespace
+}
 
 std::unique_ptr<Backend> MakeWorkloadBackend(const WorkloadOptions& options)
 {
     return std::make_unique<WorkloadBackend>(options);
 }
 
-} // namespace thread_sim::engine
+}

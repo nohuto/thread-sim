@@ -50,7 +50,7 @@ class RunValueDialog final : public win32ui::DialogWindow
         edit_ = GetDlgItem(hwnd(), ids::kRunValueEdit);
         SetAccessibleName(edit_, field_ == engine::Field::kRunDuration ? L"Run duration seconds" : L"Sample interval milliseconds");
         loading_ = true;
-        SetTextIfChanged(edit_, std::to_wstring(*Value()));
+        SetTextIfChanged(edit_, std::to_wstring(*Value()).c_str());
         loading_ = false;
         SendMessageW(edit_, EM_SETSEL, 0, -1);
     }
@@ -100,17 +100,16 @@ class RunValueDialog final : public win32ui::DialogWindow
         return &config_.sample_interval_ms;
     }
 
-    // show clamped values, restore last value for an empty field
     void Clamp()
     {
         const bool duration = field_ == engine::Field::kRunDuration;
-        const auto parsed = platform::ParseUnsigned(GetText(edit_));
+        const auto parsed = platform::ParseUnsigned(WindowText(edit_));
         if (parsed)
         {
             *Value() = static_cast<uint32_t>(std::clamp<uint64_t>(*parsed, duration ? engine::kMinRunDurationS : engine::kMinSampleIntervalMs, duration ? engine::kMaxRunDurationS : engine::kMaxSampleIntervalMs));
         }
         loading_ = true;
-        SetTextIfChanged(edit_, std::to_wstring(*Value()));
+        SetTextIfChanged(edit_, std::to_wstring(*Value()).c_str());
         loading_ = false;
     }
 
@@ -120,7 +119,7 @@ class RunValueDialog final : public win32ui::DialogWindow
     bool loading_ = false;
 };
 
-} // namespace
+}
 
 bool ShowRunValueDialog(HWND owner, engine::RunConfig* config, engine::Field field)
 {
@@ -140,4 +139,4 @@ bool ShowRunValueDialog(HWND owner, engine::RunConfig* config, engine::Field fie
     return changed;
 }
 
-} // namespace thread_sim::frame
+}

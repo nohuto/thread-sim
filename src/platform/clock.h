@@ -3,7 +3,10 @@
 
 #pragma once
 
-#include "platform/windows_config.h"
+#include <win32ui/windows_config.h>
+
+#include <win32ui/system/clock.h>
+#include <win32ui/system/date_time.h>
 
 #include <windows.h>
 
@@ -12,6 +15,9 @@
 
 namespace thread_sim::platform
 {
+
+using win32ui::FileTimeTicks;
+using win32ui::QpcClock;
 
 // cycle to time conversion requires a time stamp counter invariant across frequency & power states
 inline bool InvariantTimeStampCounter() noexcept
@@ -29,37 +35,4 @@ inline bool InvariantTimeStampCounter() noexcept
     return invariant;
 }
 
-struct QpcClock
-{
-    static int64_t Frequency() noexcept
-    {
-        static const int64_t frequency = [] {
-            LARGE_INTEGER value = {};
-            QueryPerformanceFrequency(&value);
-            return value.QuadPart > 0 ? value.QuadPart : 1;
-        }();
-        return frequency;
-    }
-    static int64_t Now() noexcept
-    {
-        LARGE_INTEGER value = {};
-        QueryPerformanceCounter(&value);
-        return value.QuadPart;
-    }
-    // scale seconds and remainder separately to avoid overflow
-    static int64_t TicksToMicroseconds(int64_t ticks) noexcept
-    {
-        const int64_t frequency = Frequency();
-        const int64_t whole = ticks / frequency;
-        const int64_t part = ticks % frequency;
-        return whole * 1'000'000 + part * 1'000'000 / frequency;
-    }
-};
-
-// FILETIME and GetThreadTimes use 100ns units
-inline uint64_t FileTimeTo100ns(const FILETIME& time) noexcept
-{
-    return (static_cast<uint64_t>(time.dwHighDateTime) << 32) | time.dwLowDateTime;
 }
-
-} // namespace thread_sim::platform

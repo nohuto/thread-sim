@@ -26,8 +26,7 @@ struct ExportInput
 
 std::wstring BuildThreadResultsCsv(const ExportInput& input);
 std::wstring BuildRunMetadataJson(const ExportInput& input);
-std::wstring CsvQuote(std::wstring_view field);
 
 platform::Status ExportResults(const std::wstring& base_path, const ExportInput& input);
 
-} // namespace thread_sim::engine
+}

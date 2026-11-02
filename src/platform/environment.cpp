@@ -5,6 +5,7 @@
 
 #include "platform/text.h"
 
+#include <win32ui/system/registry_value.h>
 #include <win32ui/system_api.h>
 
 #include <intrin.h>
@@ -19,27 +20,12 @@ namespace
 
 std::wstring RegistryString(HKEY root, const wchar_t* path, const wchar_t* name)
 {
-    wchar_t buffer[512] = {};
-    DWORD size = sizeof(buffer) - sizeof(wchar_t);
-    if (RegGetValueW(root, path, name, RRF_RT_REG_SZ, nullptr, buffer, &size) != ERROR_SUCCESS)
-    {
-        return {};
-    }
-    return Trim(buffer);
+    std::wstring value;
+    win32ui::ReadRegistryString(root, path, name, &value);
+    return win32ui::TrimWhitespace(value);
 }
 
-std::optional<DWORD> RegistryDword(HKEY root, const wchar_t* path, const wchar_t* name)
-{
-    DWORD value = 0;
-    DWORD size = sizeof(value);
-    if (RegGetValueW(root, path, name, RRF_RT_REG_DWORD, nullptr, &value, &size) != ERROR_SUCCESS)
-    {
-        return std::nullopt;
-    }
-    return value;
 }
-
-} // namespace
 
 Environment QueryEnvironment()
 {
@@ -47,11 +33,11 @@ Environment QueryEnvironment()
     const auto& version = win32ui::OsVersion();
     if (version.dwMajorVersion != 0)
     {
-        const auto ubr = RegistryDword(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"UBR");
+        DWORD ubr = 0;
         wchar_t buffer[64] = {};
-        if (ubr)
+        if (win32ui::ReadRegistryDword(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"UBR", &ubr) == ERROR_SUCCESS)
         {
-            swprintf_s(buffer, L"%lu.%lu.%lu.%lu", version.dwMajorVersion, version.dwMinorVersion, version.dwBuildNumber, *ubr);
+            swprintf_s(buffer, L"%lu.%lu.%lu.%lu", version.dwMajorVersion, version.dwMinorVersion, version.dwBuildNumber, ubr);
         }
         else
         {
@@ -141,4 +127,4 @@ const wchar_t* PriorityClassKey(uint32_t priority_class)
     }
 }
 
-} // namespace thread_sim::platform
+}

@@ -32,4 +32,4 @@ struct UiSettings
 platform::Result<UiSettings> LoadUiSettings(const std::wstring& path);
 platform::Status SaveUiSettings(const std::wstring& path, const UiSettings& settings);
 
-} // namespace thread_sim::frame
+}

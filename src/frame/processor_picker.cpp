@@ -36,18 +36,8 @@ std::wstring IndexText(uint32_t value)
 
 int TextHeight(HWND control, HFONT font, int width)
 {
-    const std::wstring text = GetText(control);
-    if (text.empty() || width <= 0)
-    {
-        return 0;
-    }
-    RECT rect = {0, 0, width, 0};
-    HDC dc = GetDC(control);
-    HGDIOBJ old = SelectObject(dc, font);
-    DrawTextW(dc, text.c_str(), -1, &rect, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
-    SelectObject(dc, old);
-    ReleaseDC(control, dc);
-    return rect.bottom;
+    const std::wstring text = WindowText(control);
+    return text.empty() || width <= 0 ? 0 : win32ui::TextHeight(control, font, text, width, DT_WORDBREAK);
 }
 
 static_assert(IDC_PICKER_LIST == ids::kPickerList && IDC_PICKER_GROUP_COMBO == ids::kPickerGroupCombo && IDC_PICKER_SELECT_ALL == ids::kPickerSelectAll && IDC_PICKER_CLEAR == ids::kPickerClear && IDC_PICKER_VALIDATION == ids::kPickerValidation && IDC_PICKER_WARNINGS == ids::kPickerWarnings);
@@ -99,10 +89,7 @@ class PickerDialog final : public win32ui::DialogWindow
         {
             SetWindowLongPtrW(list_, GWL_STYLE, GetWindowLongPtrW(list_, GWL_STYLE) | LVS_SINGLESEL);
         }
-        // apply theme before enabling check boxes so their images use the right style
-        win32ui::ApplyThemeToWindow(list_);
-        win32ui::AttachDialogListView(list_, ListHooks(), multi ? LVS_EX_CHECKBOXES : 0);
-        win32ui::ShowListGridButton(list_);
+        win32ui::SetupDialogList(list_, nullptr, multi ? LVS_EX_CHECKBOXES : 0, PickerColumns());
         errors_ = GetDlgItem(hwnd(), ids::kPickerValidation);
         SetTextRole(errors_, TextRole::error);
         warnings_ = GetDlgItem(hwnd(), ids::kPickerWarnings);
@@ -247,7 +234,7 @@ class PickerDialog final : public win32ui::DialogWindow
         }
         else if (header->code == LVN_COLUMNCLICK)
         {
-            win32ui::SortListViewItems(list_, reinterpret_cast<NMLISTVIEW*>(header)->iSubItem, true, &sort_column_, &sort_ascending_, &sort_earlier_, &PickerDialog::Compare, this);
+            win32ui::SortListViewItems(list_, reinterpret_cast<NMLISTVIEW*>(header)->iSubItem, true, &sort_column_, &sort_ascending_, &sort_earlier_, win32ui::CompareTextRows, &cells_);
             *handled = true;
         }
         else if (header->code == NM_DBLCLK && mode_ == PickerMode::kSingleProcessor)
@@ -263,52 +250,14 @@ class PickerDialog final : public win32ui::DialogWindow
     }
 
   private:
-    static int CALLBACK Compare(LPARAM left, LPARAM right, int column, void* context)
+    std::vector<win32ui::ListColumn> PickerColumns() const
     {
-        const auto* self = static_cast<const PickerDialog*>(context);
-        const auto& a = self->cells_[static_cast<size_t>(left)];
-        const auto& b = self->cells_[static_cast<size_t>(right)];
-        if (column < 0 || static_cast<size_t>(column) >= a.size() || static_cast<size_t>(column) >= b.size())
+        const auto column = [](const wchar_t* title, int width) { return win32ui::ListColumn{title, width, width}; };
+        if (mode_ == PickerMode::kCpuSets)
         {
-            return 0;
+            return {column(L"CPU Set ID", 90), column(L"Processor", 130), column(L"Core", 50), column(L"Last level cache", 100), column(L"NUMA node", 76), column(L"Efficiency class", 100), column(L"Scheduling class", 104), column(L"Flags", 180)};
         }
-        return CompareCellText(a[static_cast<size_t>(column)], b[static_cast<size_t>(column)]);
-    }
-
-    void Columns(std::initializer_list<std::pair<const wchar_t*, int>> columns)
-    {
-        while (ListView_DeleteColumn(list_, 0))
-        {
-        }
-        int index = 0;
-        for (const auto& [title, width] : columns)
-        {
-            LVCOLUMNW column = {};
-            column.mask = LVCF_TEXT | LVCF_WIDTH;
-            column.pszText = const_cast<wchar_t*>(title);
-            column.cx = Px(width);
-            ListView_InsertColumn(list_, index++, &column);
-        }
-        sort_column_ = -1;
-        sort_earlier_.clear();
-        win32ui::UpdateListViewSort(list_, -1, true);
-    }
-
-    void AddRow(std::vector<std::wstring> cells, size_t source)
-    {
-        const int row = ListView_GetItemCount(list_);
-        LVITEMW item = {};
-        item.mask = LVIF_TEXT | LVIF_PARAM;
-        item.iItem = row;
-        item.pszText = const_cast<wchar_t*>(cells.front().c_str());
-        item.lParam = static_cast<LPARAM>(cells_.size());
-        ListView_InsertItem(list_, &item);
-        for (size_t column = 1; column < cells.size(); ++column)
-        {
-            ListView_SetItemText(list_, row, static_cast<int>(column), const_cast<wchar_t*>(cells[column].c_str()));
-        }
-        cells_.push_back(std::move(cells));
-        source_.push_back(source);
+        return {column(L"Processor", 130), column(L"Core", 50), column(L"SMT", 44), column(L"L2 cache", 64), column(L"L3 cache", 64), column(L"NUMA node", 76), column(L"Efficiency class", 100), column(L"CPU Set ID", 84)};
     }
 
     size_t SourceOf(int row) const
@@ -343,23 +292,22 @@ class PickerDialog final : public win32ui::DialogWindow
     void Populate()
     {
         updating_ = true;
-        ListView_DeleteAllItems(list_);
         cells_.clear();
         source_.clear();
+        sort_column_ = -1;
+        sort_earlier_.clear();
+        win32ui::UpdateListViewSort(list_, -1, true);
         if (mode_ == PickerMode::kCpuSets)
         {
-            Columns({{L"CPU Set ID", 90}, {L"Processor", 130}, {L"Core", 50}, {L"Last level cache", 100}, {L"NUMA node", 76}, {L"Efficiency class", 100}, {L"Scheduling class", 104}, {L"Flags", 180}});
             for (size_t index = 0; index < topology_.cpu_sets.size(); ++index)
             {
                 const auto& set = topology_.cpu_sets[index];
-                AddRow({platform::FormatHex(set.id), platform::DescribeProcessor({set.group, set.logical_processor_index}), std::to_wstring(set.core_index), std::to_wstring(set.last_level_cache_index), std::to_wstring(set.numa_node_index), std::to_wstring(set.efficiency_class), std::to_wstring(set.scheduling_class), CpuSetFlags(set)}, index);
-                const bool checked = std::find(selection_.selected_cpu_set_ids.begin(), selection_.selected_cpu_set_ids.end(), set.id) != selection_.selected_cpu_set_ids.end();
-                ListView_SetCheckState(list_, ListView_GetItemCount(list_) - 1, checked);
+                cells_.push_back({platform::FormatHex(set.id), platform::DescribeProcessor({set.group, set.logical_processor_index}), std::to_wstring(set.core_index), std::to_wstring(set.last_level_cache_index), std::to_wstring(set.numa_node_index), std::to_wstring(set.efficiency_class), std::to_wstring(set.scheduling_class), CpuSetFlags(set)});
+                source_.push_back(index);
             }
         }
         else
         {
-            Columns({{L"Processor", 130}, {L"Core", 50}, {L"SMT", 44}, {L"L2 cache", 64}, {L"L3 cache", 64}, {L"NUMA node", 76}, {L"Efficiency class", 100}, {L"CPU Set ID", 84}});
             for (size_t index = 0; index < topology_.processors.size(); ++index)
             {
                 const auto& processor = topology_.processors[index];
@@ -368,25 +316,41 @@ class PickerDialog final : public win32ui::DialogWindow
                     continue;
                 }
                 const platform::CoreInfo* core = processor.core_record_index != platform::kUnknownIndex && processor.core_record_index < topology_.cores.size() ? &topology_.cores[processor.core_record_index] : nullptr;
-                AddRow({platform::DescribeProcessor(processor.id), IndexText(processor.core_record_index), core ? (core->smt ? L"Yes" : L"No") : L"", IndexText(processor.l2_cache_record_index), IndexText(processor.l3_cache_record_index), IndexText(processor.numa_node_number), core ? std::to_wstring(core->efficiency_class) : L"", processor.has_cpu_set ? platform::FormatHex(processor.cpu_set_id) : L""}, index);
-                const int row = ListView_GetItemCount(list_) - 1;
-                if (mode_ == PickerMode::kGroupAffinity)
-                {
-                    ListView_SetCheckState(list_, row, (selection_.mask & (1ull << processor.id.number)) != 0);
-                }
-                else if (mode_ == PickerMode::kSingleProcessor && selection_.has_processor && processor.id == selection_.processor)
-                {
-                    ListView_SetItemState(list_, row, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
-                    ListView_EnsureVisible(list_, row, FALSE);
-                }
+                cells_.push_back({platform::DescribeProcessor(processor.id), IndexText(processor.core_record_index), core ? (core->smt ? L"Yes" : L"No") : L"", IndexText(processor.l2_cache_record_index), IndexText(processor.l3_cache_record_index), IndexText(processor.numa_node_number), core ? std::to_wstring(core->efficiency_class) : L"", processor.has_cpu_set ? platform::FormatHex(processor.cpu_set_id) : L""});
+                source_.push_back(index);
             }
         }
-        const std::vector<win32ui::ListColumn> columns = win32ui::ListColumns(list_);
-        for (size_t column = 0; column < columns.size(); ++column)
+        win32ui::SetListRows(list_, cells_);
+        for (size_t row = 0; row < source_.size(); ++row)
         {
-            if (columns[column].visible)
+            const int item = static_cast<int>(row);
+            if (mode_ == PickerMode::kCpuSets)
             {
-                win32ui::FitListColumn(list_, static_cast<int>(column));
+                const auto& ids = selection_.selected_cpu_set_ids;
+                ListView_SetCheckState(list_, item, std::find(ids.begin(), ids.end(), topology_.cpu_sets[source_[row]].id) != ids.end());
+                continue;
+            }
+            const auto& processor = topology_.processors[source_[row]];
+            if (mode_ == PickerMode::kGroupAffinity)
+            {
+                ListView_SetCheckState(list_, item, (selection_.mask & (1ull << processor.id.number)) != 0);
+            }
+            else if (mode_ == PickerMode::kSingleProcessor && selection_.has_processor && processor.id == selection_.processor)
+            {
+                win32ui::SelectOnlyListRow(list_, item);
+            }
+        }
+        // sized once, a group switch keeps the widths the user set
+        if (!fitted_)
+        {
+            fitted_ = true;
+            const std::vector<win32ui::ListColumn> columns = win32ui::ListColumns(list_);
+            for (size_t column = 0; column < columns.size(); ++column)
+            {
+                if (columns[column].visible)
+                {
+                    win32ui::FitListColumn(list_, static_cast<int>(column));
+                }
             }
         }
         updating_ = false;
@@ -443,10 +407,9 @@ class PickerDialog final : public win32ui::DialogWindow
                 target += (target.empty() ? L"" : L"\n") + message.text;
             }
         }
-        const bool changed = GetText(errors_) != errors || GetText(warnings_) != warnings;
-        SetTextIfChanged(errors_, errors);
-        SetTextIfChanged(warnings_, warnings);
-        if (changed)
+        const bool errors_changed = SetTextIfChanged(errors_, errors.c_str());
+        const bool warnings_changed = SetTextIfChanged(warnings_, warnings.c_str());
+        if (errors_changed || warnings_changed)
         {
             Relayout();
         }
@@ -466,14 +429,15 @@ class PickerDialog final : public win32ui::DialogWindow
     HWND ok_ = nullptr;
     HWND cancel_ = nullptr;
     bool updating_ = false;
-    std::vector<std::vector<std::wstring>> cells_;
+    bool fitted_ = false;
+    win32ui::TextRows cells_;
     std::vector<size_t> source_;
     int sort_column_ = -1;
     bool sort_ascending_ = true;
     win32ui::SortKeys sort_earlier_;
 };
 
-} // namespace
+}
 
 #if defined(THREAD_SIM_DEV)
 namespace
@@ -517,4 +481,4 @@ std::optional<PickerSelection> ShowProcessorPicker(HWND owner, const PickerOptio
     return dialog.selection();
 }
 
-} // namespace thread_sim::frame
+}

@@ -98,4 +98,4 @@ std::wstring DescribeCpuSetIds(const std::vector<uint32_t>& ids)
     return text;
 }
 
-} // namespace thread_sim::frame
+}

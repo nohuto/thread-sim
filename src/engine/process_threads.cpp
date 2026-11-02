@@ -6,8 +6,9 @@
 #include "platform/clock.h"
 #include "platform/text.h"
 
+#include <win32ui/system/paths.h>
+
 #include <algorithm>
-#include <array>
 
 namespace thread_sim::engine
 {
@@ -24,20 +25,16 @@ std::wstring StartName(uintptr_t address)
     HMODULE module = nullptr;
     if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<LPCWSTR>(address), &module))
     {
-        std::array<wchar_t, 32768> path{};
-        const DWORD length = GetModuleFileNameW(module, path.data(), static_cast<DWORD>(path.size()));
-        if (length && length < path.size())
+        const std::wstring path = win32ui::ModulePath(module);
+        if (!path.empty())
         {
-            const std::wstring_view full(path.data(), length);
-            const size_t slash = full.find_last_of(L"\\/");
-            return std::wstring(full.substr(slash == std::wstring_view::npos ? 0 : slash + 1)) + L"+" +
-                   platform::FormatHex(address - reinterpret_cast<uintptr_t>(module));
+            return win32ui::FileName(path) + L"+" + platform::FormatHex(address - reinterpret_cast<uintptr_t>(module));
         }
     }
     return platform::FormatHex(address);
 }
 
-} // namespace
+}
 
 ProcessThreadSampler::ProcessThreadSampler(bool force_variable_counter)
     : invariant_counter_(!force_variable_counter && platform::InvariantTimeStampCounter())
@@ -278,8 +275,8 @@ void ProcessThreadSampler::ReadThread(CachedThread& cached, OtherThreadSnapshot&
     std::optional<uint64_t> cpu_time;
     if (GetThreadTimes(handle, &created, &exited, &kernel, &user))
     {
-        snapshot.kernel_time_100ns = platform::FileTimeTo100ns(kernel);
-        snapshot.user_time_100ns = platform::FileTimeTo100ns(user);
+        snapshot.kernel_time_100ns = platform::FileTimeTicks(kernel);
+        snapshot.user_time_100ns = platform::FileTimeTicks(user);
         cpu_time = *snapshot.kernel_time_100ns + *snapshot.user_time_100ns;
     }
     else
@@ -304,4 +301,4 @@ void ProcessThreadSampler::ReadThread(CachedThread& cached, OtherThreadSnapshot&
     cached.sample_tsc = tsc;
 }
 
-} // namespace thread_sim::engine
+}

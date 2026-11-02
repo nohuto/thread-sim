@@ -18,9 +18,11 @@
 #include <win32ui/dialog/dialog_layout.h>
 #include <win32ui/dialog/dialog_metrics.h>
 #include <win32ui/list_view/list_view.h>
+#include <win32ui/list_view/sort.h>
 #include <win32ui/window_metrics.h>
 
 #include <algorithm>
+#include <numeric>
 
 namespace thread_sim::frame
 {
@@ -30,7 +32,6 @@ using namespace ui;
 namespace
 {
 
-// Windows readback or reason the setting failed
 std::wstring Outcome(const engine::SettingOutcome& outcome, std::wstring_view readback)
 {
     if (outcome.attempted && !outcome.succeeded)
@@ -82,13 +83,16 @@ std::wstring RunningPriorityText(const engine::RunningPriority& priority, bool w
     return text;
 }
 
-} // namespace
+}
 
 static_assert(IDC_DETAILS_LIST == ids::kDetailsList);
 
-bool DetailsWindow::Open(HWND owner)
+bool DetailsWindow::Open(HWND owner, const DetailsContent& content)
 {
-    return OpenModeless(owner, MAKEINTRESOURCEW(IDD_DETAILS));
+    opening_ = &content;
+    const bool opened = OpenModeless(owner, MAKEINTRESOURCEW(IDD_DETAILS));
+    opening_ = nullptr;
+    return opened;
 }
 
 void DetailsWindow::OnCreate()
@@ -96,16 +100,17 @@ void DetailsWindow::OnCreate()
     min_width_dip_ = 420;
     min_height_dip_ = 240;
     list_ = GetDlgItem(hwnd(), ids::kDetailsList);
-    for (int index = 0; index < 4; ++index)
+    std::vector<win32ui::ListColumn> columns;
+    for (const wchar_t* title : kColumnTitles)
     {
-        LVCOLUMNW column = {};
-        column.mask = LVCF_TEXT | LVCF_WIDTH;
-        column.pszText = const_cast<wchar_t*>(kColumnTitles[index]);
-        column.cx = Px(150);
-        ListView_InsertColumn(list_, index, &column);
+        columns.push_back({title, 150, 150});
     }
-    win32ui::AttachDialogListView(list_, ListHooks());
-    win32ui::ShowListGridButton(list_);
+    win32ui::SetupDialogList(list_, nullptr, 0, std::move(columns));
+    // title and rows are there when the window shows, it is centered at its final width
+    if (opening_)
+    {
+        Show(*opening_);
+    }
 }
 
 void DetailsWindow::OnLayout(int width, int height)
@@ -119,7 +124,32 @@ void DetailsWindow::OnLayout(int width, int height)
     // bottom margin leaves room for the size grip
     const int bottom = height - std::max(margin, win32ui::SystemMetricForDpi(SM_CYHSCROLL, dpi()));
     win32ui::Place(list_, margin, margin, std::max(0, width - 2 * margin), std::max(Px(60), bottom - margin));
+    // after a dpi change the widths were measured in the old font
+    if (wanted_dpi_ && wanted_dpi_ != dpi())
+    {
+        MeasureColumns(false);
+    }
     FitColumns();
+}
+
+bool DetailsWindow::MeasureColumns(bool keep)
+{
+    std::array<int, 4> wanted = keep ? wanted_ : std::array<int, 4>{};
+    for (size_t column = 0; column < 4; ++column)
+    {
+        wanted[column] = std::max(wanted[column], ListView_GetStringWidth(list_, kColumnTitles[column]) + Px(24));
+        for (const auto& row : rows_)
+        {
+            wanted[column] = std::max(wanted[column], ListView_GetStringWidth(list_, row[column].c_str()) + Px(16));
+        }
+    }
+    wanted_dpi_ = dpi();
+    if (wanted == wanted_)
+    {
+        return false;
+    }
+    wanted_ = wanted;
+    return true;
 }
 
 void DetailsWindow::FitColumns()
@@ -127,23 +157,12 @@ void DetailsWindow::FitColumns()
     RECT client = {};
     GetClientRect(list_, &client);
     const int usable = std::max(Px(200), static_cast<int>(client.right) - win32ui::SystemMetricForDpi(SM_CXVSCROLL, dpi()));
-    std::array<int, 4> order = {0, 1, 2, 3};
-    std::sort(order.begin(), order.end(), [&](int a, int b) { return wanted_[static_cast<size_t>(a)] < wanted_[static_cast<size_t>(b)]; });
-    std::array<int, 4> widths = {};
-    int remaining = usable;
-    for (size_t position = 0; position < order.size(); ++position)
-    {
-        const size_t column = static_cast<size_t>(order[position]);
-        const int share = remaining / static_cast<int>(order.size() - position);
-        widths[column] = std::max(Px(60), std::min(std::max(wanted_[column], Px(60)), share));
-        remaining -= widths[column];
-    }
-    widths[3] += std::max(0, remaining);
+    std::vector<int> widths = win32ui::ShareSpace(wanted_, usable, Px(60));
+    widths[3] += std::max(0, usable - std::accumulate(widths.begin(), widths.end(), 0));
     for (int column = 0; column < 4; ++column)
     {
         const int fitted = widths[static_cast<size_t>(column)];
         const int current = ListView_GetColumnWidth(list_, column);
-        // width 0 columns stay hidden
         if (current > 0 && current != fitted)
         {
             ListView_SetColumnWidth(list_, column, fitted);
@@ -151,12 +170,15 @@ void DetailsWindow::FitColumns()
     }
 }
 
-void DetailsWindow::Show(const engine::ThreadConfig& requested, const engine::RunSnapshot* run, const engine::ThreadSnapshot* observed)
+void DetailsWindow::Show(const DetailsContent& content)
 {
-    if (!hwnd())
+    if (!hwnd() || !content.requested)
     {
         return;
     }
+    const engine::ThreadConfig& requested = *content.requested;
+    const engine::RunSnapshot* run = content.run;
+    const engine::ThreadSnapshot* observed = content.observed;
     const std::wstring title = L"Details of " + requested.name;
     if (title != title_)
     {
@@ -166,7 +188,7 @@ void DetailsWindow::Show(const engine::ThreadConfig& requested, const engine::Ru
     const uint32_t build = run && run->environment ? run->environment->windows_build : 0;
     const engine::AppliedSettings applied = observed ? observed->applied : engine::AppliedSettings{};
     const engine::ThreadSample* sample = observed && observed->sample ? &*observed->sample : nullptr;
-    std::vector<Row> rows;
+    win32ui::TextRows rows;
     rows.push_back({L"TID", L"", L"", observed && observed->thread_id ? std::to_wstring(observed->thread_id) : std::wstring()});
     rows.push_back({L"State", L"", L"", observed ? (sample && sample->error ? L"Query failed: " + sample->error->Describe() : ThreadStateText(*observed, build)) : std::wstring()});
     std::wstring priorities;
@@ -216,42 +238,17 @@ void DetailsWindow::Show(const engine::ThreadConfig& requested, const engine::Ru
     SetRows(std::move(rows));
 }
 
-int CALLBACK DetailsWindow::CompareRows(LPARAM left, LPARAM right, int column, void* context)
-{
-    const auto* self = static_cast<const DetailsWindow*>(context);
-    if (static_cast<size_t>(left) >= self->rows_.size() || static_cast<size_t>(right) >= self->rows_.size() || column < 0 || column >= 4)
-    {
-        return 0;
-    }
-    return CompareCellText(self->rows_[static_cast<size_t>(left)][static_cast<size_t>(column)], self->rows_[static_cast<size_t>(right)][static_cast<size_t>(column)]);
-}
-
-void DetailsWindow::SetRows(std::vector<Row> rows)
+void DetailsWindow::SetRows(win32ui::TextRows rows)
 {
     bool resort = false;
     const bool refilled = ListView_GetItemCount(list_) != static_cast<int>(rows.size());
     if (refilled)
     {
         // observed rows appear on first run, refill immediately
-        SendMessageW(list_, WM_SETREDRAW, FALSE, 0);
-        ListView_DeleteAllItems(list_);
+        const win32ui::RedrawScope redraw(list_, RDW_INVALIDATE);
         rows_ = std::move(rows);
-        for (size_t row = 0; row < rows_.size(); ++row)
-        {
-            LVITEMW item = {};
-            item.mask = LVIF_TEXT | LVIF_PARAM;
-            item.iItem = static_cast<int>(row);
-            item.pszText = const_cast<wchar_t*>(rows_[row][0].c_str());
-            item.lParam = static_cast<LPARAM>(row);
-            ListView_InsertItem(list_, &item);
-            for (int column = 1; column < 4; ++column)
-            {
-                ListView_SetItemText(list_, static_cast<int>(row), column, const_cast<wchar_t*>(rows_[row][static_cast<size_t>(column)].c_str()));
-            }
-        }
+        win32ui::SetListRows(list_, rows_);
         resort = sort_column_ >= 0;
-        SendMessageW(list_, WM_SETREDRAW, TRUE, 0);
-        InvalidateRect(list_, nullptr, FALSE);
     }
     else
     {
@@ -272,21 +269,11 @@ void DetailsWindow::SetRows(std::vector<Row> rows)
     }
     if (resort)
     {
-        win32ui::SortListViewItems(list_, sort_column_, false, &sort_column_, &sort_ascending_, &sort_earlier_, &DetailsWindow::CompareRows, this);
+        win32ui::SortListViewItems(list_, sort_column_, false, &sort_column_, &sort_ascending_, &sort_earlier_, win32ui::CompareTextRows, &rows_);
     }
     // only grow widths while rows stay, changing values must not move columns
-    std::array<int, 4> wanted = refilled ? std::array<int, 4>{} : wanted_;
-    for (size_t column = 0; column < 4; ++column)
+    if (MeasureColumns(!refilled))
     {
-        wanted[column] = std::max(wanted[column], ListView_GetStringWidth(list_, kColumnTitles[column]) + Px(24));
-        for (const auto& row : rows_)
-        {
-            wanted[column] = std::max(wanted[column], ListView_GetStringWidth(list_, row[column].c_str()) + Px(16));
-        }
-    }
-    if (wanted != wanted_)
-    {
-        wanted_ = wanted;
         FitColumns();
     }
     if (refilled)
@@ -318,7 +305,7 @@ LRESULT DetailsWindow::OnNotify(NMHDR* header, bool* handled)
 {
     if (header->hwndFrom == list_ && header->code == LVN_COLUMNCLICK)
     {
-        win32ui::SortListViewItems(list_, reinterpret_cast<NMLISTVIEW*>(header)->iSubItem, true, &sort_column_, &sort_ascending_, &sort_earlier_, &DetailsWindow::CompareRows, this);
+        win32ui::SortListViewItems(list_, reinterpret_cast<NMLISTVIEW*>(header)->iSubItem, true, &sort_column_, &sort_ascending_, &sort_earlier_, win32ui::CompareTextRows, &rows_);
         *handled = true;
         return 0;
     }
@@ -326,4 +313,4 @@ LRESULT DetailsWindow::OnNotify(NMHDR* header, bool* handled)
     return 0;
 }
 
-} // namespace thread_sim::frame
+}

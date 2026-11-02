@@ -15,7 +15,8 @@ namespace thread_sim::frame
 {
 
 const wchar_t* ShortcutText(int command);
-std::wstring ActivityMenuText(int command);
+HMENU BuildActivityMenu();
+HMENU BuildPriorityMenu();
 
 // Run > Duration seconds and View > Update speed milliseconds
 inline constexpr uint32_t kDurationPresets[] = {10, 30, 60, 300, 900, 3600};
@@ -46,6 +47,4 @@ class MainMenu
     HMENU duration_ = nullptr;
 };
 
-bool ShouldBypassAccelerator(const MSG& message);
-
-} // namespace thread_sim::frame
+}

@@ -30,4 +30,4 @@ struct Environment
 Environment QueryEnvironment();
 const wchar_t* PriorityClassKey(uint32_t priority_class);
 
-} // namespace thread_sim::platform
+}

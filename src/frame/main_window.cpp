@@ -20,12 +20,16 @@
 #include "platform/environment.h"
 #include "platform/text.h"
 
-#include <win32ui/dialog/single_line_edit.h>
+#include <win32ui/dialog/edit.h>
+#include <win32ui/focus.h>
 #include <win32ui/gdi/buffered_paint.h>
 #include <win32ui/list_view/list_view.h>
 #include <win32ui/menu/popup_menu.h>
-#include <win32ui/process_token.h>
+#include <win32ui/system/paths.h>
+#include <win32ui/system/process_token.h>
+#include <win32ui/window.h>
 #include <win32ui/window_metrics.h>
+#include <win32ui/window_placement.h>
 
 #include <dwmapi.h>
 #include <windowsx.h>
@@ -41,9 +45,9 @@ using namespace window_detail;
 namespace
 {
 
-const LPCWSTR kLastFocusProp = MAKEINTATOM(GlobalAddAtomW(L"thread-sim.LastFocus"));
+constexpr wchar_t kCopyFailed[] = L"Could not copy to the clipboard";
 
-} // namespace
+}
 
 double window_detail::ElapsedMs(int64_t start)
 {
@@ -56,7 +60,7 @@ double MsSinceProcessStart()
     GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user);
     FILETIME now = {};
     GetSystemTimePreciseAsFileTime(&now);
-    return static_cast<double>(platform::FileTimeTo100ns(now) - platform::FileTimeTo100ns(creation)) / 10000.0;
+    return static_cast<double>(platform::FileTimeTicks(now) - platform::FileTimeTicks(creation)) / 10000.0;
 }
 
 PerfLog::~PerfLog()
@@ -139,14 +143,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::RegisterClasses(HINSTANCE instance)
 {
-    WNDCLASSEXW window_class = {sizeof(window_class)};
-    window_class.lpfnWndProc = &MainWindow::WindowProc;
-    window_class.hInstance = instance;
-    window_class.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    window_class.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(IDI_APPICON));
-    window_class.hIconSm = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(IDI_APPICON), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR));
-    window_class.lpszClassName = kMainWindowClass;
-    RegisterClassExW(&window_class);
+    win32ui::RegisterWindowClass(instance, kMainWindowClass, &MainWindow::WindowProc, IDI_APPICON);
 }
 
 bool MainWindow::Create(int show_command)
@@ -196,36 +193,13 @@ bool MainWindow::Create(int show_command)
 
 void MainWindow::RestorePlacement(int show_command)
 {
-    WINDOWPLACEMENT placement = {sizeof(placement)};
-    GetWindowPlacement(hwnd_, &placement);
-    if (settings_.has_window)
+    win32ui::RestoreNormalRect(hwnd_, settings_.has_window ? &settings_.window : nullptr, settings_.window_dpi, {1240, 780});
+    int show = settings_.has_window && settings_.maximized ? SW_SHOWMAXIMIZED : (show_command == SW_SHOWMINIMIZED || show_command == SW_MINIMIZE ? SW_SHOWNORMAL : show_command);
+    if (show == SW_SHOWDEFAULT || show == SW_HIDE)
     {
-        RECT rect = settings_.window;
-        if (settings_.window_dpi != dpi_ && settings_.window_dpi != 0)
-        {
-            rect.right = rect.left + MulDiv(rect.right - rect.left, static_cast<int>(dpi_), static_cast<int>(settings_.window_dpi));
-            rect.bottom = rect.top + MulDiv(rect.bottom - rect.top, static_cast<int>(dpi_), static_cast<int>(settings_.window_dpi));
-        }
-        win32ui::ClampToWorkArea(&rect);
-        placement.rcNormalPosition = rect;
+        show = SW_SHOWNORMAL;
     }
-    else
-    {
-        MONITORINFO info = {sizeof(info)};
-        GetMonitorInfoW(MonitorFromWindow(hwnd_, MONITOR_DEFAULTTOPRIMARY), &info);
-        const int width = std::min<int>(win32ui::Scale(1240, dpi_), info.rcWork.right - info.rcWork.left);
-        const int height = std::min<int>(win32ui::Scale(780, dpi_), info.rcWork.bottom - info.rcWork.top);
-        placement.rcNormalPosition.left = info.rcWork.left + (info.rcWork.right - info.rcWork.left - width) / 2;
-        placement.rcNormalPosition.top = info.rcWork.top + (info.rcWork.bottom - info.rcWork.top - height) / 2;
-        placement.rcNormalPosition.right = placement.rcNormalPosition.left + width;
-        placement.rcNormalPosition.bottom = placement.rcNormalPosition.top + height;
-    }
-    placement.showCmd = settings_.has_window && settings_.maximized ? SW_SHOWMAXIMIZED : (show_command == SW_SHOWMINIMIZED || show_command == SW_MINIMIZE ? SW_SHOWNORMAL : show_command);
-    if (placement.showCmd == SW_SHOWDEFAULT || placement.showCmd == SW_HIDE)
-    {
-        placement.showCmd = SW_SHOWNORMAL;
-    }
-    SetWindowPlacement(hwnd_, &placement);
+    ShowWindow(hwnd_, show);
 }
 
 LRESULT CALLBACK MainWindow::WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
@@ -276,15 +250,11 @@ LRESULT MainWindow::Handle(UINT message, WPARAM wparam, LPARAM lparam)
         }
         return 0;
     case WM_GETMINMAXINFO:
-        {
-            auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
-            const UINT dpi = dpi_ ? dpi_ : win32ui::WindowDpi(hwnd_);
-            info->ptMinTrackSize.x = win32ui::Scale(720, dpi);
-            info->ptMinTrackSize.y = win32ui::Scale(520, dpi);
-            return 0;
-        }
+        win32ui::RaiseMinTrackSize(hwnd_, reinterpret_cast<MINMAXINFO*>(lparam), {720, 520}, dpi_ ? dpi_ : win32ui::WindowDpi(hwnd_), false);
+        return 0;
     case WM_ERASEBKGND:
-        return 1;
+    case WM_PRINTCLIENT:
+        return win32ui::HandleFillPaint(hwnd_, message, wparam, win32ui::ThemeBrush(win32ui::ThemeFill::background));
     case WM_PAINT:
         win32ui::PaintBuffered(hwnd_);
         if (!first_paint_logged_)
@@ -293,13 +263,6 @@ LRESULT MainWindow::Handle(UINT message, WPARAM wparam, LPARAM lparam)
             perf_.Event("first_paint_since_process_start", MsSinceProcessStart());
         }
         return 0;
-    case WM_PRINTCLIENT:
-        {
-            RECT client = {};
-            GetClientRect(hwnd_, &client);
-            FillRect(reinterpret_cast<HDC>(wparam), &client, win32ui::ThemeBrush(win32ui::ThemeFill::background));
-            return 0;
-        }
     case WM_CTLCOLOREDIT:
     case WM_CTLCOLORSTATIC:
     case WM_CTLCOLORBTN:
@@ -453,12 +416,7 @@ LRESULT MainWindow::Handle(UINT message, WPARAM wparam, LPARAM lparam)
         if (reinterpret_cast<HWND>(wparam) == table_.hwnd())
         {
             POINT point = {};
-            const int row = win32ui::ContextMenuRow(table_.hwnd(), lparam, &point);
-            if (row >= 0 && ListView_GetItemState(table_.hwnd(), row, LVIS_SELECTED) == 0)
-            {
-                ListView_SetItemState(table_.hwnd(), -1, 0, LVIS_SELECTED);
-                ListView_SetItemState(table_.hwnd(), row, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
-            }
+            win32ui::ContextMenuRow(table_.hwnd(), lparam, &point, true);
             ShowContextMenu(point);
             return 0;
         }
@@ -537,22 +495,10 @@ LRESULT MainWindow::Handle(UINT message, WPARAM wparam, LPARAM lparam)
         }
         break;
     case WM_ACTIVATE:
-        if (LOWORD(wparam) == WA_INACTIVE)
+        if (const HWND last = win32ui::ActivationFocus(hwnd_, wparam, &last_focus_))
         {
-            HWND focus = GetFocus();
-            if (focus && IsChild(hwnd_, focus))
-            {
-                SetPropW(hwnd_, kLastFocusProp, focus);
-            }
-        }
-        else
-        {
-            HWND last = static_cast<HWND>(GetPropW(hwnd_, kLastFocusProp));
-            if (last && IsWindow(last) && IsChild(hwnd_, last) && IsWindowVisible(last) && IsWindowEnabled(last))
-            {
-                SetFocus(last);
-                return 0;
-            }
+            SetFocus(last);
+            return 0;
         }
         break;
     case WM_SETTINGCHANGE:
@@ -584,13 +530,13 @@ LRESULT MainWindow::Handle(UINT message, WPARAM wparam, LPARAM lparam)
         RequestClose();
         return 0;
     case WM_DESTROY:
-        RemovePropW(hwnd_, kLastFocusProp);
         KillTimer(hwnd_, kReapTimer);
         KillTimer(hwnd_, kPollTimer);
         KillTimer(hwnd_, kApplyTimer);
         KillTimer(hwnd_, kCloseRetryTimer);
         KillTimer(hwnd_, kOtherThreadsTimer);
         window_alive_ = false;
+        win32ui::SetListGridChanged(nullptr, nullptr);
         post_target_.store(nullptr, std::memory_order_release);
         perf_.Raw("{\"event\":\"exit\",\"snapshots_applied\":" + std::to_string(snapshots_applied_) + ",\"snapshots_stale\":" + std::to_string(snapshots_stale_) + ",\"published\":" + std::to_string(controller_->mailbox().published()) + ",\"notified\":" + std::to_string(controller_->mailbox().notified()) + ",\"max_apply_ms\":" + std::to_string(snapshot_apply_max_ms_) + "}");
         PostQuitMessage(0);
@@ -674,7 +620,7 @@ bool MainWindow::CommandEnabled(int id, const std::vector<uint32_t>& selected) c
     case cmd::kRunDurationCustom:
     case cmd::kViewUpdateSpeedCustom:
         return !busy;
-    // process changes during a run go into the run's live change log
+    // process changes during a run go into the live change log of the run
     case cmd::kProcessAffinity:
     case cmd::kProcessCpuSets:
         return !busy || RunLive();
@@ -886,7 +832,7 @@ std::wstring MainWindow::DocumentName() const
 {
     if (!document_path_.empty())
     {
-        return FileNameOf(document_path_);
+        return win32ui::FileName(document_path_);
     }
     return config_.name.empty() ? L"Untitled" : config_.name;
 }
@@ -910,10 +856,7 @@ void MainWindow::UpdateTitle()
         return text;
     }();
     const std::wstring title = DocumentName() + (config_ == saved_config_ ? L"" : L"*") + L" - " + app;
-    if (GetText(hwnd_) != title)
-    {
-        SetWindowTextW(hwnd_, title.c_str());
-    }
+    SetTextIfChanged(hwnd_, title.c_str());
 }
 
 void MainWindow::Revalidate()
@@ -994,12 +937,26 @@ void MainWindow::ShowDetails()
         }
     }
     auto window = std::make_unique<DetailsWindow>(key);
-    if (!window->Open(hwnd_))
+    if (!window->Open(hwnd_, *DetailsContentOf(key)))
     {
         return;
     }
     details_.push_back(std::move(window));
-    UpdateDetails();
+}
+
+std::optional<DetailsContent> MainWindow::DetailsContentOf(uint64_t key) const
+{
+    const auto row = std::find(thread_keys_.begin(), thread_keys_.end(), key);
+    if (row == thread_keys_.end())
+    {
+        return std::nullopt;
+    }
+    const size_t index = static_cast<size_t>(row - thread_keys_.begin());
+    const int run_index = RunIndexOfRow(index);
+    const bool in_run = snapshot_ && run_index >= 0 && static_cast<size_t>(run_index) < snapshot_->threads.size() && static_cast<size_t>(run_index) < run_config_.threads.size();
+    // show results with requested values from the config used by the run
+    const engine::ThreadConfig& requested = in_run && results_stale_ ? run_config_.threads[static_cast<size_t>(run_index)] : config_.threads[index];
+    return DetailsContent{&requested, in_run ? snapshot_.get() : nullptr, in_run ? &snapshot_->threads[static_cast<size_t>(run_index)] : nullptr};
 }
 
 void MainWindow::UpdateDetails()
@@ -1007,19 +964,14 @@ void MainWindow::UpdateDetails()
     std::erase_if(details_, [](const auto& window) { return !window->window(); });
     for (auto& window : details_)
     {
-        const auto row = std::find(thread_keys_.begin(), thread_keys_.end(), window->thread_key());
-        if (row == thread_keys_.end())
+        const std::optional<DetailsContent> content = DetailsContentOf(window->thread_key());
+        if (!content)
         {
             // thread was removed or replaced by a new config
             DestroyWindow(window->window());
             continue;
         }
-        const size_t index = static_cast<size_t>(row - thread_keys_.begin());
-        const int run_index = RunIndexOfRow(index);
-        const bool in_run = snapshot_ && run_index >= 0 && static_cast<size_t>(run_index) < snapshot_->threads.size() && static_cast<size_t>(run_index) < run_config_.threads.size();
-        // show results with requested values from the config used by the run
-        const engine::ThreadConfig& requested = in_run && results_stale_ ? run_config_.threads[static_cast<size_t>(run_index)] : config_.threads[index];
-        window->Show(requested, in_run ? snapshot_.get() : nullptr, in_run ? &snapshot_->threads[static_cast<size_t>(run_index)] : nullptr);
+        window->Show(*content);
     }
     std::erase_if(details_, [](const auto& window) { return !window->window(); });
 }
@@ -1089,14 +1041,18 @@ bool MainWindow::PreTranslate(MSG* message)
         OnCommand(cmd::kThreadActive);
         return true;
     }
-    if (win32ui::TranslateShortcuts(hwnd_, menu_.shortcuts(), message, ShouldBypassAccelerator))
+    if (win32ui::TranslateShortcuts(hwnd_, menu_.shortcuts(), message, win32ui::TextInputOwnsKey))
     {
         return true;
     }
 
     if (message->message == WM_KEYDOWN && message->wParam == VK_F6 && !(GetKeyState(VK_CONTROL) & 0x8000) && !(GetKeyState(VK_MENU) & 0x8000))
     {
-        SetFocus(GetFocus() == toolbar_ || !IsWindowVisible(toolbar_) ? table_.hwnd() : toolbar_);
+        const HWND panes[] = {toolbar_, table_.hwnd()};
+        if (const HWND next = win32ui::CyclePane(hwnd_, panes, !(GetKeyState(VK_SHIFT) & 0x8000)))
+        {
+            SetFocus(next);
+        }
         return true;
     }
     if (message->message == WM_KEYDOWN && message->wParam == VK_TAB)
@@ -1123,7 +1079,7 @@ void MainWindow::OnCommand(int id)
     case cmd::kFileOpen:
         if (ConfirmDiscard())
         {
-            if (const auto path = FileDialog(hwnd_, false, L"Open config", L"ThreadSim config (*.jsonc, *.json)", L"*.jsonc;*.json", L"jsonc", L"", settings_.last_directory))
+            if (const auto path = FileDialog(hwnd_, false, L"Open config", L"ThreadSim config (*.jsonc, *.json)\0*.jsonc;*.json\0All files\0*.*\0", L"", settings_.last_directory))
             {
                 OpenDocument(*path);
             }
@@ -1142,15 +1098,17 @@ void MainWindow::OnCommand(int id)
         PostMessageW(hwnd_, WM_CLOSE, 0, 0);
         break;
     case cmd::kEditCopy:
-        win32ui::CopyTextToClipboard(hwnd_, win32ui::SelectedRowsText(table_.hwnd()));
-        SetStatusMessage(L"Copied " + std::to_wstring(table_.SelectedCount()) + (table_.SelectedCount() == 1 ? L" row" : L" rows"));
-        break;
+        {
+            const size_t count = table_.SelectedCount();
+            const bool copied = win32ui::CopyTextToClipboard(hwnd_, win32ui::SelectedRowsText(table_.hwnd()));
+            SetStatusMessage(copied ? L"Copied " + std::to_wstring(count) + (count == 1 ? L" row" : L" rows") : std::wstring(kCopyFailed));
+            break;
+        }
     case cmd::kEditCopyIds:
-        win32ui::CopyTextToClipboard(hwnd_, table_.ThreadIdsText());
-        SetStatusMessage(L"Copied TIDs");
+        SetStatusMessage(win32ui::CopyTextToClipboard(hwnd_, table_.ThreadIdsText()) ? L"Copied TIDs" : kCopyFailed);
         break;
     case cmd::kEditSelectAll:
-        table_.SelectAll();
+        win32ui::SelectAllListItems(table_.hwnd());
         break;
     case cmd::kThreadAdd:
         AddThread(false);
@@ -1491,59 +1449,20 @@ void MainWindow::MoveThread(int delta)
     OnSelectionChanged();
 }
 
-HMENU MainWindow::BuildPriorityMenu(const std::vector<uint32_t>& selected) const
-{
-    HMENU menu = CreatePopupMenu();
-    for (size_t index = 0; index < std::size(engine::kAllRelativeThreadPriorities); ++index)
-    {
-        const int id = cmd::kThreadPriorityFirst + static_cast<int>(index);
-        const std::wstring text = engine::DescribeRelativePriority(static_cast<int32_t>(engine::kAllRelativeThreadPriorities[index]));
-        MENUITEMINFOW item = {sizeof(item)};
-        item.fMask = MIIM_FTYPE | MIIM_ID | MIIM_STRING | MIIM_STATE;
-        item.fType = MFT_STRING | MFT_RADIOCHECK;
-        item.fState = (CommandEnabled(id, selected) ? MFS_ENABLED : MFS_GRAYED) | (CommandChecked(id, selected) ? MFS_CHECKED : MFS_UNCHECKED);
-        item.wID = static_cast<UINT>(id);
-        item.dwTypeData = const_cast<wchar_t*>(text.c_str());
-        InsertMenuItemW(menu, static_cast<UINT>(index), TRUE, &item);
-    }
-    return menu;
-}
-
-HMENU MainWindow::BuildActivityMenu(const std::vector<uint32_t>& selected) const
-{
-    HMENU menu = CreatePopupMenu();
-    for (int id = cmd::kThreadActivityFirst; id <= cmd::kThreadActivityCustom; ++id)
-    {
-        if (id == cmd::kThreadActivityCustom)
-        {
-            AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-        }
-        const std::wstring text = ActivityMenuText(id);
-        MENUITEMINFOW item = {sizeof(item)};
-        item.fMask = MIIM_FTYPE | MIIM_ID | MIIM_STRING | MIIM_STATE;
-        item.fType = MFT_STRING | MFT_RADIOCHECK;
-        item.fState = (CommandEnabled(id, selected) ? MFS_ENABLED : MFS_GRAYED) | (CommandChecked(id, selected) ? MFS_CHECKED : MFS_UNCHECKED);
-        item.wID = static_cast<UINT>(id);
-        item.dwTypeData = const_cast<wchar_t*>(text.c_str());
-        InsertMenuItemW(menu, static_cast<UINT>(GetMenuItemCount(menu)), TRUE, &item);
-    }
-    return menu;
-}
-
 void MainWindow::ShowContextMenu(POINT screen)
 {
+    // WM_INITMENUPOPUP sets the item states when each popup opens
     HMENU menu = CreatePopupMenu();
-    const std::vector<uint32_t> selected = table_.SelectedThreads();
     auto add = [&](int id, const wchar_t* text) {
-        win32ui::AppendMenuItem(menu, MF_STRING | (CommandEnabled(id, selected) ? 0 : MF_GRAYED) | (CommandChecked(id, selected) ? MF_CHECKED : 0), static_cast<UINT_PTR>(id), text, ShortcutText(id));
+        win32ui::AppendMenuItem(menu, MF_STRING, static_cast<UINT_PTR>(id), text, ShortcutText(id));
     };
     add(cmd::kEditCopy, L"&Copy");
     add(cmd::kEditCopyIds, L"Copy &TIDs");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     add(cmd::kThreadRename, L"Re&name");
     add(cmd::kThreadActive, L"Activ&e");
-    AppendMenuW(menu, MF_POPUP | (ThreadSettingEditable(selected) ? 0 : MF_GRAYED), reinterpret_cast<UINT_PTR>(BuildActivityMenu(selected)), L"Activit&y");
-    AppendMenuW(menu, MF_POPUP | (ThreadSettingEditable(selected) ? 0 : MF_GRAYED), reinterpret_cast<UINT_PTR>(BuildPriorityMenu(selected)), L"&Priority");
+    AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildActivityMenu()), L"Activit&y");
+    AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildPriorityMenu()), L"&Priority");
     add(cmd::kThreadBoost, L"Priority &boost");
     add(cmd::kThreadSharedMutex, L"Shared mute&x");
     add(cmd::kThreadAffinity, L"A&ffinity...");
@@ -1737,7 +1656,7 @@ void MainWindow::RenameThread(int thread, std::wstring name)
     {
         return;
     }
-    name = platform::Trim(name);
+    name = win32ui::TrimWhitespace(name);
     if (name.empty() || name == config_.threads[static_cast<size_t>(thread)].name)
     {
         return;
@@ -2049,13 +1968,12 @@ void MainWindow::SaveSettings()
     {
         return;
     }
-    WINDOWPLACEMENT placement = {sizeof(placement)};
-    if (GetWindowPlacement(hwnd_, &placement))
+    bool maximized = false;
+    if (win32ui::CaptureNormalRect(hwnd_, &settings_.window, &maximized))
     {
         settings_.has_window = true;
-        settings_.window = placement.rcNormalPosition;
         settings_.window_dpi = win32ui::DpiOverride() ? GetDpiForWindow(hwnd_) : dpi_;
-        settings_.maximized = placement.showCmd == SW_SHOWMAXIMIZED || IsZoomed(hwnd_);
+        settings_.maximized = maximized;
     }
     if (win32ui::DpiOverride())
     {
@@ -2066,4 +1984,4 @@ void MainWindow::SaveSettings()
     (void)SaveUiSettings(environment_.settings_path, settings_);
 }
 
-} // namespace thread_sim::frame
+}

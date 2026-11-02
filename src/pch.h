@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "platform/windows_config.h"
+#include <win32ui/windows_config.h>
 
 #include <windows.h>
 

@@ -101,7 +101,7 @@ struct CpuSetInfo
 struct Topology
 {
     std::vector<ProcessorGroupInfo> groups;
-    std::vector<LogicalProcessorInfo> processors; //
+    std::vector<LogicalProcessorInfo> processors;
     std::vector<CoreInfo> cores;
     std::vector<CacheInfo> caches;
     std::vector<NumaNodeInfo> numa_nodes;
@@ -130,4 +130,4 @@ std::wstring DescribeProcessor(ProcessorNumber id);
 std::wstring DescribeGroupAffinity(uint16_t group, uint64_t mask);
 Result<uint64_t> ParseMaskList(std::wstring_view text, uint8_t maximum_processor_count);
 
-} // namespace thread_sim::platform
+}

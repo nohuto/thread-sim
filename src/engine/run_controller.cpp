@@ -7,6 +7,8 @@
 
 #include "platform/clock.h"
 
+#include <win32ui/system/worker.h>
+
 #include <bcrypt.h>
 
 #include <cerrno>
@@ -259,7 +261,7 @@ std::wstring ExceptionText(const std::exception& exception)
     return text;
 }
 
-} // namespace
+}
 
 struct RunController::CoordinatorState
 {
@@ -389,7 +391,7 @@ unsigned __stdcall RunController::CoordinatorEntry(void* parameter)
 
 void RunController::Coordinate(CoordinatorState& state)
 {
-    SetThreadDescription(GetCurrentThread(), L"Coordinator");
+    win32ui::NameThread(GetCurrentThread(), L"CoordThread");
     std::optional<platform::Error> fault;
     try
     {
@@ -547,4 +549,4 @@ std::wstring MakeRunId()
     return buffer;
 }
 
-} // namespace thread_sim::engine
+}

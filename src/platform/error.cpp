@@ -3,8 +3,9 @@
 
 #include "platform/error.h"
 
+#include <win32ui/system/error_text.h>
+
 #include <cstdio>
-#include <iterator>
 
 namespace thread_sim::platform
 {
@@ -24,38 +25,9 @@ Error Make(ErrorDomain domain, int64_t code, std::wstring_view operation, std::w
 
 std::wstring FormatNtStatus(LONG status)
 {
-    wchar_t buffer[512] = {};
-    DWORD length = FormatMessageW(FORMAT_MESSAGE_FROM_HMODULE | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, GetModuleHandleW(L"ntdll.dll"), static_cast<DWORD>(status), 0, buffer, static_cast<DWORD>(std::size(buffer)), nullptr);
-    if (length == 0)
-    {
-        return {};
-    }
-    while (length > 0 && (buffer[length - 1] == L'\r' || buffer[length - 1] == L'\n' || buffer[length - 1] == L' '))
-    {
-        buffer[--length] = L'\0';
-    }
-    return buffer;
+    return win32ui::FormatModuleError(static_cast<DWORD>(status), L"ntdll.dll");
 }
 
-} // namespace
-
-std::wstring FormatWin32Error(DWORD code)
-{
-    if (code == ERROR_SUCCESS)
-    {
-        return {};
-    }
-    wchar_t buffer[512] = {};
-    DWORD length = FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, code, 0, buffer, static_cast<DWORD>(std::size(buffer)), nullptr);
-    if (length == 0)
-    {
-        return L"Unknown error.";
-    }
-    while (length > 0 && (buffer[length - 1] == L'\r' || buffer[length - 1] == L'\n' || buffer[length - 1] == L' '))
-    {
-        buffer[--length] = L'\0';
-    }
-    return buffer;
 }
 
 std::wstring Error::CodeText() const
@@ -97,11 +69,11 @@ std::wstring Error::Describe() const
     std::wstring explanation = detail;
     if (explanation.empty() && domain == ErrorDomain::kWin32)
     {
-        explanation = FormatWin32Error(static_cast<DWORD>(code));
+        explanation = win32ui::FormatWin32Error(static_cast<DWORD>(code));
     }
     if (explanation.empty() && domain == ErrorDomain::kHResult)
     {
-        explanation = FormatWin32Error(static_cast<DWORD>(code));
+        explanation = win32ui::FormatWin32Error(static_cast<DWORD>(code));
     }
     if (explanation.empty() && domain == ErrorDomain::kNtStatus)
     {
@@ -115,7 +87,7 @@ std::wstring Error::Describe() const
     std::wstring code_text = CodeText();
     if (!code_text.empty() && !detail.empty() && (domain == ErrorDomain::kWin32 || domain == ErrorDomain::kHResult || domain == ErrorDomain::kNtStatus))
     {
-        const std::wstring system = domain == ErrorDomain::kNtStatus ? FormatNtStatus(static_cast<LONG>(code)) : FormatWin32Error(static_cast<DWORD>(code));
+        const std::wstring system = domain == ErrorDomain::kNtStatus ? FormatNtStatus(static_cast<LONG>(code)) : win32ui::FormatWin32Error(static_cast<DWORD>(code));
         if (!system.empty())
         {
             code_text += L": " + system;
@@ -188,4 +160,4 @@ Error InternalError(std::wstring_view operation, std::wstring_view detail)
     return Make(ErrorDomain::kInternal, 0, operation, detail);
 }
 
-} // namespace thread_sim::platform
+}

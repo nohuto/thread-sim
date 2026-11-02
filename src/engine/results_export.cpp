@@ -10,6 +10,7 @@
 #include "platform/text.h"
 
 #include <win32ui/json/writer.h>
+#include <win32ui/system/strings.h>
 
 namespace thread_sim::engine
 {
@@ -249,29 +250,6 @@ void WriteError(win32ui::JsonWriter& writer, std::wstring_view key, const std::o
     writer.EndObject();
 }
 
-} // namespace
-
-std::wstring CsvQuote(std::wstring_view field)
-{
-    const bool needs_quotes = field.find_first_of(L",\"\r\n") != std::wstring_view::npos || (!field.empty() && (field.front() == L' ' || field.back() == L' '));
-    if (!needs_quotes)
-    {
-        return std::wstring(field);
-    }
-    std::wstring quoted = L"\"";
-    for (wchar_t ch : field)
-    {
-        if (ch == L'"')
-        {
-            quoted += L"\"\"";
-        }
-        else
-        {
-            quoted.push_back(ch);
-        }
-    }
-    quoted += L"\"";
-    return quoted;
 }
 
 std::wstring BuildThreadResultsCsv(const ExportInput& input)
@@ -374,7 +352,7 @@ std::wstring BuildThreadResultsCsv(const ExportInput& input)
         row.push_back(observed ? FormatUnsigned(observed->live_change_count) : L"");
         for (size_t column = 0; column < row.size(); ++column)
         {
-            csv += (column ? L"," : L"") + CsvQuote(row[column]);
+            csv += (column ? L"," : L"") + win32ui::CsvField(row[column]);
         }
         csv += L"\r\n";
     }
@@ -622,7 +600,7 @@ std::wstring BuildRunMetadataJson(const ExportInput& input)
 
 platform::Status ExportResults(const std::wstring& base_path, const ExportInput& input)
 {
-    const std::string csv = "\xEF\xBB\xBF" + platform::WideToUtf8(BuildThreadResultsCsv(input));
+    const std::string csv = "\xEF\xBB\xBF" + win32ui::WideToMultiByte(BuildThreadResultsCsv(input), CP_UTF8);
     if (platform::Status status = platform::WriteFileAtomic(base_path + L".csv", csv); !status)
     {
         return status;
@@ -630,4 +608,4 @@ platform::Status ExportResults(const std::wstring& base_path, const ExportInput&
     return platform::WriteUtf8FileAtomic(base_path + L".json", BuildRunMetadataJson(input));
 }
 
-} // namespace thread_sim::engine
+}

@@ -4,7 +4,6 @@
 #include "engine/config_io.h"
 
 #include "platform/file_io.h"
-#include "records/json.h"
 #include "platform/text.h"
 
 #include <win32ui/json/reader.h>
@@ -123,7 +122,7 @@ class ConfigParser
 {
   public:
     ConfigParser(std::wstring_view text, std::wstring* error)
-        : reader_(text, json::Errors(error))
+        : reader_(text, win32ui::JsonErrorText(error))
     {
     }
 
@@ -500,12 +499,12 @@ class ConfigParser
                 {
                     return false;
                 }
-                wchar_t* end = nullptr;
-                out->cpu_set_hash = text.size() > 2 && text[0] == L'0' && text[1] == L'x' ? wcstoull(text.c_str() + 2, &end, 16) : 0;
-                if (!end || *end != L'\0')
+                const std::optional<uint64_t> hash = text.starts_with(L"0x") ? platform::ParseUnsigned(text, 16) : std::nullopt;
+                if (!hash)
                 {
                     return reader_.Fail(L"The saved CPU Set hash is malformed.");
                 }
+                out->cpu_set_hash = *hash;
                 return true;
             }
             *handled = false;
@@ -517,7 +516,7 @@ class ConfigParser
     LoadedConfig* loaded_ = nullptr;
 };
 
-} // namespace
+}
 
 TopologyFingerprint FingerprintOf(const platform::Topology& topology)
 {
@@ -611,4 +610,4 @@ platform::Result<LoadedConfig> LoadRunConfig(const std::wstring& path)
     return loaded;
 }
 
-} // namespace thread_sim::engine
+}

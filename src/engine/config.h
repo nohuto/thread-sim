@@ -31,7 +31,6 @@ inline constexpr uint32_t kMinPeriodMs = 1;
 inline constexpr uint32_t kMaxPeriodMs = 10000;
 inline constexpr uint32_t kMaxStartDelayMs = 60000;
 
-// relative thread priority within the process priority class
 enum class RelativeThreadPriority : int8_t
 {
     kIdle = -15,
@@ -72,9 +71,9 @@ enum class ActivityLevel : uint8_t
     kCustom,
 };
 
-// periods start at run origin + k * period_ms, work fills work_percent of each period
-// waitable timer waits for the next period, 100 percent runs without waits
-// a start delay holds the thread after the run starts, its first period is the one containing the release
+// periods start at run origin + k * period_ms, work fills work_percent of each period, a waitable timer waits for the
+// next period, 100 percent runs without waits, a start delay holds the thread after the run starts, its first period is
+// the one containing the release
 struct ActivityConfig
 {
     uint32_t work_percent = 100;
@@ -158,4 +157,4 @@ ThreadConfig MakeDefaultThread(size_t index);
 RunConfig MakeDefaultRun();
 std::wstring NextThreadName(const RunConfig& run);
 
-} // namespace thread_sim::engine
+}

@@ -11,4 +11,4 @@ inline constexpr int kDialogDetails = 2002;
 inline constexpr int kDialogCopy = 2003;
 inline constexpr int kAboutLineFirst = 2010;
 
-} // namespace thread_sim::ui::ids
+}

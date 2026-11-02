@@ -166,7 +166,7 @@ constexpr RelativePriorityName kRelativePriorities[] = {
     {15, L"Time critical"},
 };
 
-} // namespace
+}
 
 const wchar_t* ThreadStateName(uint32_t state)
 {
@@ -215,4 +215,4 @@ std::optional<double> CpuSecondsFromCycles(const RunSnapshot& run, const ThreadS
     return static_cast<double>(*thread.cycles_total) / *run.cycle_counter_hz;
 }
 
-} // namespace thread_sim::engine
+}

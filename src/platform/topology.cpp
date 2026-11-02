@@ -322,7 +322,6 @@ LogicalProcessorInfo* FindMutableProcessor(std::vector<LogicalProcessorInfo>& pr
     return it != processors.end() && it->id == id ? &*it : nullptr;
 }
 
-// returns false if any mask bit refers to an inactive processor
 template <typename Fn>
 bool ForEachMaskProcessor(std::vector<LogicalProcessorInfo>& processors, std::span<const GroupAffinity> masks, Fn&& apply)
 {
@@ -583,7 +582,7 @@ Result<std::vector<uint32_t>> QueryProcessDefaultCpuSets()
     return InternalError(L"GetProcessDefaultCpuSets", L"Required count kept growing across retries.");
 }
 
-} // namespace
+}
 
 const LogicalProcessorInfo* Topology::FindProcessor(ProcessorNumber id) const noexcept
 {
@@ -755,7 +754,7 @@ std::wstring FormatMaskList(uint64_t mask)
 Result<uint64_t> ParseMaskList(std::wstring_view text, uint8_t maximum_processor_count)
 {
     constexpr wchar_t kOperation[] = L"ParseMaskList";
-    if (Trim(text).empty())
+    if (win32ui::IsBlank(text))
     {
         return ValidationError(kOperation, L"The processor list is empty.");
     }
@@ -766,7 +765,7 @@ Result<uint64_t> ParseMaskList(std::wstring_view text, uint8_t maximum_processor
     {
         const size_t comma = text.find(L',', start);
         const std::wstring_view item = text.substr(start, comma == std::wstring_view::npos ? std::wstring_view::npos : comma - start);
-        const std::wstring trimmed = Trim(item);
+        const std::wstring trimmed = win32ui::TrimWhitespace(item);
         if (trimmed.empty())
         {
             return ValidationError(kOperation, L"The processor list has an empty item.");
@@ -796,4 +795,4 @@ Result<uint64_t> ParseMaskList(std::wstring_view text, uint8_t maximum_processor
     return mask;
 }
 
-} // namespace thread_sim::platform
+}

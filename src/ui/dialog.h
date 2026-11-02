@@ -37,4 +37,4 @@ enum class SaveChoice
 };
 SaveChoice AskSaveChanges(HWND owner, std::wstring_view document_name);
 
-} // namespace thread_sim::ui
+}

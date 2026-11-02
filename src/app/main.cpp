@@ -5,7 +5,8 @@
 
 #include "platform/text.h"
 
-#include <shellapi.h>
+#include <win32ui/system/app_runtime.h>
+#include <win32ui/system/process_launch.h>
 
 #include <string>
 #include <vector>
@@ -22,15 +23,13 @@ struct ParseResult
 ParseResult ParseCommandLine()
 {
     ParseResult result;
-    int count = 0;
-    LPWSTR* arguments = CommandLineToArgvW(GetCommandLineW(), &count);
-    if (!arguments)
+    DWORD parse_error = ERROR_SUCCESS;
+    const std::vector<std::wstring> args = win32ui::CommandLineArgs(nullptr, &parse_error);
+    if (parse_error != ERROR_SUCCESS)
     {
         result.error = L"The command line couldnt be parsed";
         return result;
     }
-    std::vector<std::wstring> args(arguments + 1, arguments + count);
-    LocalFree(arguments);
 
     auto& options = result.options;
     for (size_t index = 0; index < args.size() && result.error.empty(); ++index)
@@ -135,11 +134,11 @@ ParseResult ParseCommandLine()
     return result;
 }
 
-} // namespace
+}
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show_command)
 {
-    HeapSetInformation(nullptr, HeapEnableTerminationOnCorruption, nullptr, 0);
+    win32ui::HardenProcess();
     const ParseResult parsed = ParseCommandLine();
     if (!parsed.error.empty())
     {

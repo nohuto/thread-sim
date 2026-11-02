@@ -12,7 +12,7 @@ static_assert(ids::kDialogMessage == win32ui::kMessageTextId && ids::kDialogDeta
 
 void RegisterDialogClass(HINSTANCE instance, int icon)
 {
-    win32ui::RegisterDialogClass(instance, kDialogClass, DialogThemeHooks(), icon);
+    win32ui::RegisterDialogClass(instance, kDialogClass, win32ui::ThemeDialogHooks(), icon);
 }
 
 INT_PTR ShowMessage(HWND owner, win32ui::MessageSpec spec)
@@ -35,20 +35,9 @@ void ShowError(HWND owner, std::wstring_view title, std::wstring_view summary, c
     win32ui::MessageSpec spec;
     spec.title = title;
     spec.message = summary;
+    // context, operation, reason and code, each once
     spec.details = error.Describe();
-    if (!error.operation.empty())
-    {
-        spec.details += L"\n\nOperation: " + error.operation;
-    }
-    if (!error.context.empty())
-    {
-        spec.details += L"\nContext: " + error.context;
-    }
-    const std::wstring code = error.CodeText();
-    if (!code.empty())
-    {
-        spec.details += L"\nCode: " + code;
-    }
+    spec.wrap_details = true;
     spec.buttons = {{IDOK, L"OK"}};
     spec.default_id = IDOK;
     spec.cancel_id = IDOK;
@@ -68,4 +57,4 @@ SaveChoice AskSaveChanges(HWND owner, std::wstring_view document_name)
                                                                 : SaveChoice::kCancel;
 }
 
-} // namespace thread_sim::ui
+}

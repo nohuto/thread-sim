@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "platform/windows_config.h"
+#include <win32ui/windows_config.h>
 
 #include <windows.h>
 
@@ -43,8 +43,6 @@ struct Error
     Error& WithContext(std::wstring_view text) &;
     Error&& WithContext(std::wstring_view text) &&;
 };
-
-std::wstring FormatWin32Error(DWORD code);
 
 Error Win32Error(DWORD code, std::wstring_view operation);
 // call immediately after the failing API
@@ -140,4 +138,4 @@ class [[nodiscard]] Status
     std::optional<Error> error_;
 };
 
-} // namespace thread_sim::platform
+}

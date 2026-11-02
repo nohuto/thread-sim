@@ -16,6 +16,7 @@
 #include <win32ui/gdi/fonts.h>
 #include <win32ui/gdi/icon_loader.h>
 #include <win32ui/list_view/list_view.h>
+#include <win32ui/theme/theme.h>
 #include <win32ui/window_metrics.h>
 
 #include <algorithm>
@@ -34,10 +35,13 @@ void MainWindow::CreateChildren()
     CreateToolbar();
     // shared grid setting for table and dialog lists, save on change
     win32ui::SetAllListGridLines(settings_.show_grid_lines);
-    SetListGrid(IDI_LIST_GRID_DARK, IDI_LIST_GRID_LIGHT, [this](bool shown) {
-        settings_.show_grid_lines = shown;
-        SaveSettings();
-    });
+    win32ui::SetListGridIcons(IDI_LIST_GRID_DARK, IDI_LIST_GRID_LIGHT);
+    win32ui::SetListGridChanged([](void* context, bool shown) {
+        auto* window = static_cast<MainWindow*>(context);
+        window->settings_.show_grid_lines = shown;
+        window->SaveSettings();
+    },
+                                this);
     table_.Create(hwnd_, ids::kThreadTable);
     status_hooks_ = StatusBarHooks();
     status_hooks_.context = this;
@@ -108,9 +112,7 @@ void MainWindow::ReplaceFonts(UINT dpi)
 
 void MainWindow::ApplyFontsAndMetrics()
 {
-    ApplyFonts(hwnd_, fonts_);
-    win32ui::RefreshToolbar(toolbar_);
-    win32ui::RefreshStatusBar(status_);
+    win32ui::ReapplyFonts(hwnd_, fonts_.ui());
     menu_.bar().ApplyTheme();
 }
 
@@ -132,8 +134,8 @@ void MainWindow::Layout()
     GetClientRect(hwnd_, &client);
     const int width = client.right - client.left;
     const int height = client.bottom - client.top;
-    // move all children without redraw, then repaint once
-    // avoids copying pixels from moved siblings and completes each resize frame
+    // move all children without redraw, then repaint once, avoids copying pixels from moved siblings and completes each
+    // resize frame
     const UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW;
     const int toolbar_height = settings_.show_toolbar ? win32ui::ToolbarHeight(toolbar_) : 0;
     SetWindowPos(toolbar_, nullptr, 0, 0, width, toolbar_height, flags);
@@ -164,14 +166,11 @@ void MainWindow::OnDpiChanged(UINT dpi, const RECT* suggested)
     const UINT old_dpi = dpi_;
     dpi_ = dpi;
     table_.Rescale(old_dpi, dpi_);
+    // refreshes the table too
     ReplaceFonts(dpi_);
-    win32ui::RefreshListView(table_.hwnd());
-    if (suggested)
-    {
-        SetWindowPos(hwnd_, nullptr, suggested->left, suggested->top, suggested->right - suggested->left, suggested->bottom - suggested->top, SWP_NOZORDER | SWP_NOACTIVATE);
-    }
+    win32ui::ApplySuggestedRect(hwnd_, suggested);
     Layout();
     RedrawWindow(hwnd_, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME);
 }
 
-} // namespace thread_sim::frame
+}

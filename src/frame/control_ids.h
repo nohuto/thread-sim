@@ -27,11 +27,10 @@ inline constexpr int kActivityDelayEdit = 2306;
 inline constexpr int kActivityWakeCombo = 2307;
 
 inline constexpr int kRunValueEdit = 2401;
-inline constexpr int kTextPromptEdit = 2421;
 
 inline constexpr int kDetailsList = 2503;
 
-} // namespace thread_sim::frame::ids
+}
 
 namespace thread_sim::frame::cmd
 {
@@ -103,4 +102,4 @@ inline constexpr int kProcessCpuSets = 40711;
 inline constexpr int kDevSimulateDpiFirst = 40621; // 96, 120, 144, 192
 inline constexpr int kDevSimulateDpiLast = 40624;
 
-} // namespace thread_sim::frame::cmd
+}

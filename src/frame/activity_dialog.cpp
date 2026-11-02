@@ -18,6 +18,8 @@
 #include <win32ui/dialog/combo_box.h>
 #include <win32ui/dialog/dialog_layout.h>
 
+#include <windowsx.h>
+
 #include <algorithm>
 #include <string>
 #include <tuple>
@@ -35,7 +37,7 @@ static_assert(IDC_ACTIVITY_WORK_EDIT == ids::kActivityWorkEdit && IDC_ACTIVITY_P
 class ActivityDialog final : public win32ui::DialogWindow
 {
   public:
-    // the period applies to every selected thread when any of them uses the shared mutex
+    // period applies to every selected thread when any of them uses the shared mutex
     ActivityDialog(const engine::RunConfig& config, int focused, bool any_shared_mutex, engine::Field focus, std::wstring title)
         : activity_(config.threads[static_cast<size_t>(focused)].activity), uses_shared_mutex_(any_shared_mutex), focus_(focus), title_(std::move(title))
     {
@@ -82,11 +84,11 @@ class ActivityDialog final : public win32ui::DialogWindow
         SetWindowPos(timer_, nullptr, 0, 0, std::max<int>(combo.right - combo.left, win32ui::ComboFitWidth(timer_)), combo.bottom - combo.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         SetWindowPos(wake_, nullptr, 0, 0, std::max<int>(combo.right - combo.left, win32ui::ComboFitWidth(timer_)), combo.bottom - combo.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         loading_ = true;
-        SetTextIfChanged(work_, std::to_wstring(activity_.work_percent));
-        SetTextIfChanged(period_, std::to_wstring(activity_.period_ms));
-        SetTextIfChanged(delay_, std::to_wstring(activity_.start_delay_ms));
-        SetComboIndex(timer_, static_cast<int>(activity_.waitable_timer_kind));
-        SetComboIndex(wake_, static_cast<int>(activity_.wake_source));
+        SetTextIfChanged(work_, std::to_wstring(activity_.work_percent).c_str());
+        SetTextIfChanged(period_, std::to_wstring(activity_.period_ms).c_str());
+        SetTextIfChanged(delay_, std::to_wstring(activity_.start_delay_ms).c_str());
+        win32ui::SetComboIndex(timer_, static_cast<int>(activity_.waitable_timer_kind));
+        win32ui::SetComboIndex(wake_, static_cast<int>(activity_.wake_source));
         loading_ = false;
         UpdateRelevance();
     }
@@ -111,15 +113,15 @@ class ActivityDialog final : public win32ui::DialogWindow
         case ids::kActivityDelayEdit:
             return Number(code, control, &activity_.start_delay_ms, 0, engine::kMaxStartDelayMs);
         case ids::kActivityTimerCombo:
-            if (code == CBN_SELCHANGE && ComboIndex(control) >= 0)
+            if (code == CBN_SELCHANGE && ComboBox_GetCurSel(control) >= 0)
             {
-                activity_.waitable_timer_kind = static_cast<engine::WaitableTimerKind>(ComboIndex(control));
+                activity_.waitable_timer_kind = static_cast<engine::WaitableTimerKind>(ComboBox_GetCurSel(control));
             }
             return true;
         case ids::kActivityWakeCombo:
-            if (code == CBN_SELCHANGE && ComboIndex(control) >= 0)
+            if (code == CBN_SELCHANGE && ComboBox_GetCurSel(control) >= 0)
             {
-                activity_.wake_source = static_cast<engine::WakeSource>(ComboIndex(control));
+                activity_.wake_source = static_cast<engine::WakeSource>(ComboBox_GetCurSel(control));
                 UpdateRelevance();
             }
             return true;
@@ -146,7 +148,7 @@ class ActivityDialog final : public win32ui::DialogWindow
         {
             return true;
         }
-        const auto parsed = platform::ParseUnsigned(GetText(control));
+        const auto parsed = platform::ParseUnsigned(WindowText(control));
         if (parsed)
         {
             *target = static_cast<uint32_t>(std::clamp<uint64_t>(*parsed, minimum, maximum));
@@ -154,14 +156,14 @@ class ActivityDialog final : public win32ui::DialogWindow
         if (code == EN_KILLFOCUS)
         {
             loading_ = true;
-            SetTextIfChanged(control, std::to_wstring(*target));
+            SetTextIfChanged(control, std::to_wstring(*target).c_str());
             loading_ = false;
         }
         UpdateRelevance();
         return true;
     }
 
-    // the period also bounds shared mutex ownership, the timer only applies when waiting between slices
+    // period also bounds shared mutex ownership, the timer only applies when waiting between slices
     void UpdateRelevance()
     {
         const engine::ActivityRelevance relevance = engine::RelevanceOf(activity_, uses_shared_mutex_);
@@ -203,7 +205,7 @@ class ActivityDialog final : public win32ui::DialogWindow
     bool loading_ = false;
 };
 
-} // namespace
+}
 
 bool ShowActivityDialog(HWND owner, engine::RunConfig* config, const std::vector<uint32_t>& threads, int focused, engine::Field focus)
 {
@@ -227,4 +229,4 @@ bool ShowActivityDialog(HWND owner, engine::RunConfig* config, const std::vector
     return changed;
 }
 
-} // namespace thread_sim::frame
+}

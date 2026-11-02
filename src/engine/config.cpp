@@ -93,7 +93,7 @@ const wchar_t* LabelOf(const Names<Enum> (&table)[N], Enum value)
     return entry ? entry->label : L"Unknown";
 }
 
-} // namespace
+}
 
 const wchar_t* RelativeThreadPriorityKey(RelativeThreadPriority value)
 {
@@ -210,4 +210,4 @@ std::wstring NextThreadName(const RunConfig& run)
     }
 }
 
-} // namespace thread_sim::engine
+}

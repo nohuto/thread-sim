@@ -25,4 +25,4 @@ Status SetProcessPriorityClassValue(DWORD priority_class);
 Status SetProcessAffinity(uint64_t mask);
 Status SetProcessDefaultCpuSetIds(std::span<const uint32_t> ids);
 
-} // namespace thread_sim::platform
+}

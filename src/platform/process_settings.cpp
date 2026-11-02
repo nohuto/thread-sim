@@ -88,4 +88,4 @@ Status SetProcessDefaultCpuSetIds(std::span<const uint32_t> ids)
     return Status::Ok();
 }
 
-} // namespace thread_sim::platform
+}

@@ -32,7 +32,6 @@ struct SystemProcess
 
 Result<std::vector<SystemThread>> ParseSystemThreads(std::span<const std::byte> buffer, uint32_t process_id, SystemProcess* process = nullptr);
 
-// test overrides, empty functions use system APIs and QpcClock
 struct SystemThreadQueryOptions
 {
     std::function<LONG(HANDLE, HANDLE, ACCESS_MASK, ULONG, ULONG, PHANDLE)> get_next_thread;
@@ -90,4 +89,4 @@ class SystemThreadQuery
 Result<int32_t> QueryRunningThreadPriority();
 Result<uintptr_t> QueryThreadStartAddress(HANDLE thread);
 
-} // namespace thread_sim::platform
+}

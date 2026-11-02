@@ -26,7 +26,6 @@ class NotificationSink
 {
   public:
     // engine threads call this, must be cheap, thread safe and nonblocking
-    // returns false if notification cannot be queued
     virtual bool NotifySnapshotReady() noexcept = 0;
 
   protected:
@@ -86,8 +85,7 @@ struct ThreadPolicyRequest
     ThreadAffinityConfig affinity;
 };
 
-// shared by UI controller, coordinator and worker threads
-// only coordinator calls Publish and SetRunOrigin
+// shared by UI controller, coordinator and worker threads, only the coordinator calls Publish and SetRunOrigin
 class RunContext
 {
   public:
@@ -170,8 +168,8 @@ class Backend
   public:
     // coordinator destroys backend after Run, destructor must not throw
     virtual ~Backend() = default;
-    // runs on coordinator, must publish transitions and honor stop promptly
-    // must join all threads even on exceptions, then publish Completed or Failed
+    // runs on the coordinator, must publish transitions and honor stop promptly, must join all threads even on
+    // exceptions, then publish Completed or Failed
     virtual void Run(RunContext& context) = 0;
 };
 
@@ -206,9 +204,9 @@ class RunController
     {
         return static_cast<bool>(coordinator_);
     }
-    // nonblocking, true once coordinator exits and run is released
+    // nonblocking
     bool TryReap();
-    // waits up to timeout_ms for coordinator exit, true once run is released
+    // waits up to timeout_ms for coordinator exit
     bool WaitIdle(uint32_t timeout_ms);
     const SnapshotMailbox& mailbox() const noexcept
     {
@@ -231,4 +229,4 @@ class RunController
 std::wstring MakeRunId();
 std::wstring UtcNowIso8601();
 
-} // namespace thread_sim::engine
+}

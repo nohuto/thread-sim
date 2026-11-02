@@ -11,7 +11,6 @@ thread_sim_add_library(thread_sim_engine
     validation.cpp
 )
 target_link_libraries(thread_sim_engine PUBLIC
-    thread_sim_records
     thread_sim_platform
     bcrypt
 )

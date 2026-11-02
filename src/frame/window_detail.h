@@ -50,8 +50,6 @@ inline constexpr ToolButton kToolButtons[] = {
 };
 
 double ElapsedMs(int64_t start);
-std::optional<std::wstring> FileDialog(HWND owner, bool save, const wchar_t* title, const wchar_t* filter_name, const wchar_t* filter_spec, const wchar_t* extension, const std::wstring& initial_name, const std::wstring& folder);
-std::wstring DirectoryOf(const std::wstring& path);
-std::wstring FileNameOf(const std::wstring& path);
+std::optional<std::wstring> FileDialog(HWND owner, bool save, const wchar_t* title, const wchar_t* filter, const std::wstring& initial_name, const std::wstring& folder);
 
-} // namespace thread_sim::frame::window_detail
+}

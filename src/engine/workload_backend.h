@@ -16,7 +16,6 @@ struct SampleMeasurement
     int64_t readback_ticks = 0;
 };
 
-// test overrides, defaults use normal behavior
 struct WorkloadOptions
 {
     std::optional<size_t> force_setter_failure_thread;
@@ -32,4 +31,4 @@ struct WorkloadOptions
 
 std::unique_ptr<Backend> MakeWorkloadBackend(const WorkloadOptions& options = {});
 
-} // namespace thread_sim::engine
+}

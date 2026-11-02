@@ -18,4 +18,4 @@ namespace thread_sim::frame
 
 bool ShowActivityDialog(HWND owner, engine::RunConfig* config, const std::vector<uint32_t>& threads, int focused, engine::Field focus = engine::Field::kNone);
 
-} // namespace thread_sim::frame
+}

@@ -1,8 +1,7 @@
 // Copyright (C) 2026 nohuto
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// requested settings stay in RunConfig, OS outcomes in AppliedSettings
-// unavailable measurements stay empty, never zero
+// requested settings stay in RunConfig, OS outcomes in AppliedSettings, unavailable measurements stay empty, never zero
 
 #pragma once
 
@@ -190,15 +189,10 @@ const wchar_t* ThreadRunStateLabel(ThreadRunState state);
 const wchar_t* ThreadRunStateKey(ThreadRunState state);
 bool IsTerminal(RunState state);
 
-// _KTHREAD_STATE name, nullptr if no supported build defines it
 const wchar_t* ThreadStateName(uint32_t state);
-// _KWAIT_REASON name for this Windows build, nullptr if undefined
 const wchar_t* WaitReasonName(uint32_t reason, uint32_t build);
-// "Running", "Waiting (WrDelayExecution)", "Unknown state (12)", "Waiting (unknown wait reason 43)"
 std::wstring DescribeThreadState(const ThreadSample& sample, uint32_t build);
-// "Below normal (-1)", unnamed THREAD_PRIORITY_* values show only their number
 std::wstring DescribeRelativePriority(int32_t value);
-// thread cycles converted using the run counter rate
 std::optional<double> CpuSecondsFromCycles(const RunSnapshot& run, const ThreadSnapshot& thread);
 
-} // namespace thread_sim::engine
+}

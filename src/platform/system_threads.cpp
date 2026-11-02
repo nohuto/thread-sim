@@ -86,7 +86,7 @@ bool UnsupportedThreadQuery(LONG status)
     return status == static_cast<LONG>(0xC0000003u) || status == static_cast<LONG>(0xC0000002u);
 }
 
-} // namespace
+}
 
 Result<std::vector<SystemThread>> ParseSystemThreads(std::span<const std::byte> buffer, uint32_t process_id, SystemProcess* summary)
 {
@@ -351,4 +351,4 @@ Result<uintptr_t> QueryThreadStartAddress(HANDLE thread)
     return reinterpret_cast<uintptr_t>(address);
 }
 
-} // namespace thread_sim::platform
+}

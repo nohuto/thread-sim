@@ -1,5 +1,4 @@
 thread_sim_add_library(thread_sim_ui
-    controls.cpp
     dialog.cpp
     theme.cpp
 )

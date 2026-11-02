@@ -14,11 +14,10 @@
 #include "resource.h"
 
 #include <win32ui/gdi/fonts.h>
+#include <win32ui/system/app_runtime.h>
+#include <win32ui/system/paths.h>
+#include <win32ui/system/worker.h>
 #include <win32ui/window_metrics.h>
-
-#include <commctrl.h>
-#include <objbase.h>
-#include <uxtheme.h>
 
 namespace thread_sim::frame
 {
@@ -34,16 +33,13 @@ int Fail(const std::wstring& text)
     return 3;
 }
 
-} // namespace
+}
 
 int RunApplication(HINSTANCE instance, const AppOptions& options, int show_command)
 {
     // thread name shown by View > Show all threads
-    SetThreadDescription(GetCurrentThread(), L"GUI");
-    const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    INITCOMMONCONTROLSEX controls = {sizeof(controls), ICC_LISTVIEW_CLASSES | ICC_BAR_CLASSES | ICC_LINK_CLASS | ICC_STANDARD_CLASSES};
-    InitCommonControlsEx(&controls);
-    BufferedPaintInit();
+    win32ui::NameThread(GetCurrentThread(), L"GUIThread");
+    const win32ui::GuiRuntime runtime;
 
     ApplicationEnvironment environment;
     environment.data_dir = options.data_dir.empty() ? platform::DefaultDataDirectory() : options.data_dir;
@@ -54,11 +50,6 @@ int RunApplication(HINSTANCE instance, const AppOptions& options, int show_comma
             if (!options.data_dir.empty())
             {
                 // explicit data directories must be usable, no silent fallback
-                BufferedPaintUnInit();
-                if (SUCCEEDED(com))
-                {
-                    CoUninitialize();
-                }
                 return Fail(L"The data directory cannot be used:\n" + status.error().Describe());
             }
             environment.data_dir.clear();
@@ -66,7 +57,7 @@ int RunApplication(HINSTANCE instance, const AppOptions& options, int show_comma
     }
     if (!environment.data_dir.empty())
     {
-        environment.settings_path = platform::JoinPath(environment.data_dir, L"settings.json");
+        environment.settings_path = win32ui::JoinPath(environment.data_dir, L"settings.json");
     }
 
 #if defined(THREAD_SIM_DEV)
@@ -133,13 +124,7 @@ int RunApplication(HINSTANCE instance, const AppOptions& options, int show_comma
             DispatchMessageW(&message);
         }
     }
-    ReleaseAccessibility();
-    BufferedPaintUnInit();
-    if (SUCCEEDED(com))
-    {
-        CoUninitialize();
-    }
     return exit_code;
 }
 
-} // namespace thread_sim::frame
+}

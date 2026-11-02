@@ -22,4 +22,4 @@ void ReadThreadPolicy(HANDLE handle, AppliedSettings& applied);
 std::wstring ThreadContext(size_t index, const ThreadConfig& thread);
 platform::Status ApplyThreadPolicy(HANDLE handle, const ThreadConfig& thread, size_t index, AppliedSettings& applied, std::optional<PolicySetting> force_failure = {});
 
-} // namespace thread_sim::engine
+}

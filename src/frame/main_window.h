@@ -38,7 +38,6 @@ namespace thread_sim::frame
 inline constexpr wchar_t kMainWindowClass[] = L"thread-sim.MainWindow";
 inline constexpr UINT kSnapshotMessage = WM_APP + 1;
 
-// milliseconds since process creation
 double MsSinceProcessStart();
 
 // development timing log as JSON lines, --dev perf log
@@ -114,6 +113,7 @@ class MainWindow final : public engine::NotificationSink
     int RunIndexOfRow(size_t row) const;
     void ShowDetails();
     void UpdateDetails();
+    std::optional<DetailsContent> DetailsContentOf(uint64_t key) const;
     std::wstring RunTipText() const;
     void OnSnapshotReady();
     void OnSnapshot();
@@ -142,8 +142,6 @@ class MainWindow final : public engine::NotificationSink
     bool RunLive() const;
     void ApplyLivePolicy(const std::vector<uint32_t>& threads);
     void FocusFirstIssue();
-    HMENU BuildPriorityMenu(const std::vector<uint32_t>& selected) const;
-    HMENU BuildActivityMenu(const std::vector<uint32_t>& selected) const;
     void ShowContextMenu(POINT screen);
     void ShowDurationMenu(const RECT& button);
     void ShowAbout();
@@ -184,6 +182,7 @@ class MainWindow final : public engine::NotificationSink
     HWND toolbar_ = nullptr;
     win32ui::StatusBarHooks status_hooks_;
     HWND status_ = nullptr;
+    HWND last_focus_ = nullptr;
     ThreadTable table_;
     std::vector<std::unique_ptr<DetailsWindow>> details_;
 
@@ -213,11 +212,10 @@ class MainWindow final : public engine::NotificationSink
     bool children_ready_ = false;
     // minimized, other threads are not visible
     bool other_sampling_paused_ = false;
-    // idle timer interval, 0 while stopped
     uint32_t other_threads_interval_ms_ = 0;
     uint64_t snapshots_applied_ = 0;
     uint64_t snapshots_stale_ = 0;
     double snapshot_apply_max_ms_ = 0;
 };
 
-} // namespace thread_sim::frame
+}

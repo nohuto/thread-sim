@@ -11,8 +11,6 @@
 
 #include <win32ui/menu/popup_menu.h>
 
-#include <commctrl.h>
-
 namespace thread_sim::frame
 {
 
@@ -49,6 +47,8 @@ constexpr win32ui::Shortcut kShortcuts[] = {
     {cmd::kThreadMoveUp, FALT, VK_UP, L"Alt+Up"},
     {cmd::kThreadMoveDown, FALT, VK_DOWN, L"Alt+Down"},
     {cmd::kThreadRename, 0, VK_F2, L"F2"},
+    // list toggles it on Space
+    {cmd::kThreadActive, 0, 0, L"Space"},
     {cmd::kThreadDetails, FALT, VK_RETURN, L"Alt+Enter"},
     {cmd::kViewRefresh, 0, VK_F5, L"F5"},
     {cmd::kRunStart, FCONTROL, VK_F5, L"Ctrl+F5"},
@@ -58,14 +58,10 @@ constexpr win32ui::Shortcut kShortcuts[] = {
     {cmd::kRunStopAll, FSHIFT, VK_F5, L"Shift+F5"},
 };
 
-} // namespace
+}
 
 const wchar_t* ShortcutText(int command)
 {
-    if (command == cmd::kThreadActive)
-    {
-        return L"Space";
-    }
     return win32ui::ShortcutText(kShortcuts, command);
 }
 
@@ -83,6 +79,28 @@ std::wstring ActivityMenuText(int command)
 std::wstring CustomValueMenuText(const std::wstring& value)
 {
     return value.empty() ? L"&Custom..." : L"&Custom (" + value + L")...";
+}
+
+HMENU BuildActivityMenu()
+{
+    HMENU menu = CreatePopupMenu();
+    for (int command = cmd::kThreadActivityFirst; command <= cmd::kThreadActivityLast; ++command)
+    {
+        AppendRadio(menu, command, ActivityMenuText(command));
+    }
+    Separator(menu);
+    AppendRadio(menu, cmd::kThreadActivityCustom, ActivityMenuText(cmd::kThreadActivityCustom));
+    return menu;
+}
+
+HMENU BuildPriorityMenu()
+{
+    HMENU menu = CreatePopupMenu();
+    for (size_t index = 0; index < std::size(engine::kAllRelativeThreadPriorities); ++index)
+    {
+        AppendRadio(menu, cmd::kThreadPriorityFirst + static_cast<int>(index), engine::DescribeRelativePriority(static_cast<int32_t>(engine::kAllRelativeThreadPriorities[index])));
+    }
+    return menu;
 }
 
 void MainMenu::Build(HWND window)
@@ -115,20 +133,8 @@ void MainMenu::Build(HWND window)
     Separator(threads);
     Append(threads, cmd::kThreadRename, L"Re&name");
     Append(threads, cmd::kThreadActive, L"Activ&e");
-    HMENU activity = CreatePopupMenu();
-    for (int command = cmd::kThreadActivityFirst; command <= cmd::kThreadActivityLast; ++command)
-    {
-        AppendRadio(activity, command, ActivityMenuText(command));
-    }
-    Separator(activity);
-    AppendRadio(activity, cmd::kThreadActivityCustom, ActivityMenuText(cmd::kThreadActivityCustom));
-    AppendMenuW(threads, MF_POPUP, reinterpret_cast<UINT_PTR>(activity), L"Activit&y");
-    HMENU priority = CreatePopupMenu();
-    for (size_t index = 0; index < std::size(engine::kAllRelativeThreadPriorities); ++index)
-    {
-        AppendRadio(priority, cmd::kThreadPriorityFirst + static_cast<int>(index), engine::DescribeRelativePriority(static_cast<int32_t>(engine::kAllRelativeThreadPriorities[index])));
-    }
-    AppendMenuW(threads, MF_POPUP, reinterpret_cast<UINT_PTR>(priority), L"&Priority");
+    AppendMenuW(threads, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildActivityMenu()), L"Activit&y");
+    AppendMenuW(threads, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildPriorityMenu()), L"&Priority");
     Append(threads, cmd::kThreadBoost, L"Priority &boost");
     Append(threads, cmd::kThreadSharedMutex, L"Shared &mutex");
     Append(threads, cmd::kThreadAffinity, L"A&ffinity...");
@@ -221,36 +227,4 @@ void MainMenu::Build(HWND window)
     shortcuts_.Create(kShortcuts);
 }
 
-bool ShouldBypassAccelerator(const MSG& message)
-{
-    if (message.message != WM_KEYDOWN && message.message != WM_SYSKEYDOWN)
-    {
-        return false;
-    }
-    HWND focus = GetFocus();
-    wchar_t name[32] = {};
-    if (!focus || !GetClassNameW(focus, name, static_cast<int>(std::size(name))) || _wcsicmp(name, WC_EDITW) != 0)
-    {
-        return false;
-    }
-    const bool control = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-    const bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
-    switch (message.wParam)
-    {
-    case VK_DELETE:
-    case VK_INSERT:
-    case VK_UP:
-    case VK_DOWN:
-        return !alt || message.wParam == VK_DELETE || message.wParam == VK_INSERT;
-    case 'A':
-    case 'C':
-    case 'V':
-    case 'X':
-    case 'Z':
-        return control;
-    default:
-        return false;
-    }
 }
-
-} // namespace thread_sim::frame

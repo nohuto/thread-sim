@@ -140,4 +140,4 @@ void ReadThreadPolicy(HANDLE handle, AppliedSettings& applied)
     }
 }
 
-} // namespace thread_sim::engine
+}

@@ -13,7 +13,6 @@
 namespace thread_sim::frame
 {
 
-// edits kRunDuration or kSampleInterval, true if OK changed config
 bool ShowRunValueDialog(HWND owner, engine::RunConfig* config, engine::Field field);
 
-} // namespace thread_sim::frame
+}

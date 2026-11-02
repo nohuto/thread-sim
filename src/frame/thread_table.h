@@ -63,7 +63,6 @@ class ThreadTable
     size_t SelectedCount() const;
     int FocusedThread() const;
     void SelectThread(int thread, bool exclusive);
-    void SelectAll();
     void BeginRename(int thread);
     std::wstring ThreadIdsText() const;
     std::vector<int> ColumnWidthsDip(UINT dpi) const;
@@ -91,7 +90,6 @@ class ThreadTable
     using CellTexts = std::array<std::wstring, static_cast<size_t>(TableColumn::kCount)>;
 
     HWND list_ = nullptr;
-    // app list hooks with table cell text
     win32ui::ListViewHooks hooks_;
     const engine::RunConfig* config_ = nullptr;
     std::shared_ptr<const engine::RunSnapshot> snapshot_;
@@ -101,6 +99,7 @@ class ThreadTable
     bool others_moved_ = false; // thread list changed, requires full row refresh
     std::vector<uint32_t> kept_selected_others_;
     uint32_t kept_focused_other_ = 0;
+    uint32_t kept_mark_other_ = 0;
     int sort_column_ = -1;
     bool sort_ascending_ = true;
     win32ui::SortKeys sort_earlier_;
@@ -110,4 +109,4 @@ class ThreadTable
     RECT row_bounds_ = {};
 };
 
-} // namespace thread_sim::frame
+}

@@ -12,6 +12,8 @@
 
 #include "platform/text.h"
 
+#include <win32ui/list_view/list_view.h>
+#include <win32ui/list_view/sort.h>
 #include <win32ui/system_api.h>
 #include <win32ui/window_metrics.h>
 
@@ -65,12 +67,6 @@ std::wstring ActivityText(const engine::ActivityConfig& activity, bool uses_shar
     return DescribeActivity(activity, uses_shared_mutex) + (engine::RelevanceOf(activity, uses_shared_mutex).waitable_timer_kind && activity.waitable_timer_kind == engine::WaitableTimerKind::kHighResolution ? L", high resolution timer" : L"");
 }
 
-std::wstring Clean(std::wstring text)
-{
-    std::replace_if(text.begin(), text.end(), [](wchar_t ch) { return ch == L'\t' || ch == L'\r' || ch == L'\n'; }, L' ');
-    return text;
-}
-
 // other threads have no config, show Windows readback
 std::wstring OtherText(const engine::OtherThreadSnapshot& thread, TableColumn column)
 {
@@ -109,13 +105,13 @@ std::wstring OtherText(const engine::OtherThreadSnapshot& thread, TableColumn co
     }
 }
 
-} // namespace
+}
 
 HWND ThreadTable::Create(HWND parent, int id)
 {
     list_ = CreateWindowExW(0, WC_LISTVIEWW, L"Threads", WS_CHILD | WS_VISIBLE | WS_TABSTOP | LVS_REPORT | LVS_OWNERDATA | LVS_SHOWSELALWAYS | LVS_EDITLABELS, 0, 0, 10, 10, parent, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), GetModuleHandleW(nullptr), nullptr);
     // copy and text search read row cells directly, bypassing the 512-character LVN_GETDISPINFO buffer
-    hooks_ = *ListHooks();
+    hooks_ = win32ui::DialogListHooks();
     hooks_.context = this;
     hooks_.cell_text = [](void* context, HWND, int row, int subitem, std::wstring* text) {
         if (subitem < 0 || static_cast<size_t>(subitem) >= kColumnCount)
@@ -215,7 +211,7 @@ void ThreadTable::SetOtherThreads(std::shared_ptr<const std::vector<engine::Othe
 void ThreadTable::KeepOtherSelection()
 {
     kept_selected_others_.clear();
-    for (int row : SelectedRows(list_))
+    for (int row : win32ui::SelectedListItems(list_))
     {
         if (const engine::OtherThreadSnapshot* other = OtherAt(row))
         {
@@ -224,12 +220,15 @@ void ThreadTable::KeepOtherSelection()
     }
     const engine::OtherThreadSnapshot* focused = OtherAt(ListView_GetNextItem(list_, -1, LVNI_FOCUSED));
     kept_focused_other_ = focused ? focused->thread_id : 0;
+    const engine::OtherThreadSnapshot* mark = OtherAt(ListView_GetSelectionMark(list_));
+    kept_mark_other_ = mark ? mark->thread_id : 0;
 }
 
 void ThreadTable::RefreshAll(bool others_only)
 {
     const std::vector<uint32_t> selected = SelectedThreads();
     const int focused = FocusedThread();
+    const int mark = ThreadAt(ListView_GetSelectionMark(list_));
     // preserve other thread selection by TID
     if (!others_moved_)
     {
@@ -252,32 +251,33 @@ void ThreadTable::RefreshAll(bool others_only)
     }
     const int count = static_cast<int>(view_.size() + other_view_.size());
     ListView_SetItemCountEx(list_, count, LVSICF_NOSCROLL | (others_only ? LVSICF_NOINVALIDATEALL : 0));
-    ListView_SetItemState(list_, -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
+    win32ui::ListSelection selection;
     for (uint32_t thread : selected)
     {
-        const int row = RowOf(static_cast<int>(thread));
-        if (row >= 0)
-        {
-            ListView_SetItemState(list_, row, LVIS_SELECTED, LVIS_SELECTED);
-        }
+        selection.rows.push_back(RowOf(static_cast<int>(thread)));
     }
+    selection.focused = RowOf(focused);
+    selection.mark = RowOf(mark);
+    std::sort(kept_selected_others_.begin(), kept_selected_others_.end());
     for (size_t index = 0; index < other_view_.size(); ++index)
     {
         const uint32_t id = (*others_)[static_cast<size_t>(other_view_[index])].thread_id;
         const int row = static_cast<int>(view_.size() + index);
-        if (std::find(kept_selected_others_.begin(), kept_selected_others_.end(), id) != kept_selected_others_.end())
+        if (std::binary_search(kept_selected_others_.begin(), kept_selected_others_.end(), id))
         {
-            ListView_SetItemState(list_, row, LVIS_SELECTED, LVIS_SELECTED);
+            selection.rows.push_back(row);
         }
-        if (kept_focused_other_ && id == kept_focused_other_)
+        // focused configured thread wins
+        if (kept_focused_other_ && id == kept_focused_other_ && selection.focused < 0)
         {
-            ListView_SetItemState(list_, row, LVIS_FOCUSED, LVIS_FOCUSED);
+            selection.focused = row;
+        }
+        if (kept_mark_other_ && id == kept_mark_other_ && selection.mark < 0)
+        {
+            selection.mark = row;
         }
     }
-    if (const int row = RowOf(focused); row >= 0)
-    {
-        ListView_SetItemState(list_, row, LVIS_FOCUSED, LVIS_FOCUSED);
-    }
+    win32ui::ApplyListSelection(list_, selection);
     if (!others_only)
     {
         shown_.assign(static_cast<size_t>(count), CellTexts{});
@@ -493,7 +493,6 @@ void ThreadTable::Resort(bool others_only)
     {
         return;
     }
-    // sort configured and other threads separately
     const auto sort = [&](std::vector<int>& rows, auto&& text) {
         std::vector<CellTexts> keys(rows.size());
         for (size_t item = 0; item < keys.size(); ++item)
@@ -507,7 +506,7 @@ void ThreadTable::Resort(bool others_only)
             const auto& left = keys[static_cast<size_t>(a)];
             const auto& right = keys[static_cast<size_t>(b)];
             const int result = win32ui::CompareSorted(sort_column_, sort_ascending_, sort_earlier_, [&](int column) {
-                return CompareCellText(left[static_cast<size_t>(column)], right[static_cast<size_t>(column)]);
+                return win32ui::CompareListText(left[static_cast<size_t>(column)], right[static_cast<size_t>(column)], true);
             });
             return result < 0;
         });
@@ -593,7 +592,6 @@ LRESULT ThreadTable::CustomDraw(NMLVCUSTOMDRAW* draw)
                 {
                     return CDRF_SKIPDEFAULT;
                 }
-                // record painted cells here
                 if (row >= 0 && static_cast<size_t>(row) < shown_.size())
                 {
                     shown_[static_cast<size_t>(row)][index] = RowText(row, static_cast<TableColumn>(index));
@@ -614,7 +612,7 @@ LRESULT ThreadTable::CustomDraw(NMLVCUSTOMDRAW* draw)
 std::vector<uint32_t> ThreadTable::SelectedThreads() const
 {
     std::vector<uint32_t> threads;
-    for (int row : SelectedRows(list_))
+    for (int row : win32ui::SelectedListItems(list_))
     {
         const int thread = ThreadAt(row);
         if (thread >= 0)
@@ -649,7 +647,8 @@ void ThreadTable::SelectThread(int thread, bool exclusive)
     }
     if (exclusive)
     {
-        ListView_SetItemState(list_, -1, 0, LVIS_SELECTED);
+        win32ui::SelectOnlyListRow(list_, row);
+        return;
     }
     ListView_SetItemState(list_, row, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
     ListView_EnsureVisible(list_, row, FALSE);
@@ -678,11 +677,6 @@ void ThreadTable::RedrawCheckBoxes(const std::vector<uint32_t>& threads)
     }
 }
 
-void ThreadTable::SelectAll()
-{
-    ListView_SetItemState(list_, -1, LVIS_SELECTED, LVIS_SELECTED);
-}
-
 void ThreadTable::BeginRename(int thread)
 {
     const int row = RowOf(thread);
@@ -697,7 +691,7 @@ void ThreadTable::BeginRename(int thread)
 std::wstring ThreadTable::ThreadIdsText() const
 {
     std::wstring text = L"Name\tTID\r\n";
-    std::vector<int> rows = SelectedRows(list_);
+    std::vector<int> rows = win32ui::SelectedListItems(list_);
     if (rows.empty())
     {
         rows.resize(view_.size() + other_view_.size());
@@ -705,7 +699,7 @@ std::wstring ThreadTable::ThreadIdsText() const
     }
     for (int row : rows)
     {
-        text += Clean(RowText(row, TableColumn::kName)) + L"\t" + RowText(row, TableColumn::kThreadId) + L"\r\n";
+        text += win32ui::SingleLineText(RowText(row, TableColumn::kName)) + L"\t" + RowText(row, TableColumn::kThreadId) + L"\r\n";
     }
     return text;
 }
@@ -770,4 +764,4 @@ void ThreadTable::Rescale(UINT old_dpi, UINT new_dpi)
     }
 }
 
-} // namespace thread_sim::frame
+}

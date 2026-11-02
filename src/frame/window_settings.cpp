@@ -3,8 +3,6 @@
 
 #include "frame/window_settings.h"
 
-#include "records/json.h"
-
 #include "platform/file_io.h"
 
 #include <win32ui/json/reader.h>
@@ -38,7 +36,7 @@ bool ReadInt(win32ui::JsonReader& reader, int* out, int64_t low, int64_t high)
     return true;
 }
 
-} // namespace
+}
 
 platform::Result<UiSettings> LoadUiSettings(const std::wstring& path)
 {
@@ -46,7 +44,7 @@ platform::Result<UiSettings> LoadUiSettings(const std::wstring& path)
     if (!text)
     {
         const platform::Error& failure = text.error();
-        // a missing file means defaults
+        // missing file means defaults
         if (failure.domain == platform::ErrorDomain::kWin32 && (failure.code == ERROR_FILE_NOT_FOUND || failure.code == ERROR_PATH_NOT_FOUND))
         {
             return UiSettings{};
@@ -59,7 +57,7 @@ platform::Result<UiSettings> LoadUiSettings(const std::wstring& path)
         return settings;
     }
     std::wstring error;
-    win32ui::JsonReader reader(text.value(), json::Errors(&error));
+    win32ui::JsonReader reader(text.value(), win32ui::JsonErrorText(&error));
     bool format_ok = false;
     std::set<std::wstring> seen;
     const bool ok = reader.Object([&](const std::wstring& key) {
@@ -197,7 +195,7 @@ platform::Status SaveUiSettings(const std::wstring& path, const UiSettings& sett
     writer.BeginArray(L"column_widths_dip");
     for (int width : settings.column_widths_dip)
     {
-        // the reader accepts 0 to 4000
+        // reader accepts 0 to 4000
         writer.Signed({}, std::clamp(width, 0, 4000));
     }
     writer.EndArray();
@@ -210,4 +208,4 @@ platform::Status SaveUiSettings(const std::wstring& path, const UiSettings& sett
     return platform::WriteUtf8FileAtomic(path, writer.Take());
 }
 
-} // namespace thread_sim::frame
+}

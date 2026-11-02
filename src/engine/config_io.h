@@ -42,4 +42,4 @@ platform::Result<LoadedConfig> ParseRunConfig(std::wstring_view text);
 platform::Status SaveRunConfig(const std::wstring& path, const RunConfig& config, const platform::Topology& topology);
 platform::Result<LoadedConfig> LoadRunConfig(const std::wstring& path);
 
-} // namespace thread_sim::engine
+}

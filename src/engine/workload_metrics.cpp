@@ -130,4 +130,4 @@ __declspec(noinline) uint64_t WorkloadBatch(uint64_t state) noexcept
     return state;
 }
 
-} // namespace thread_sim::engine
+}
