@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.30)
-project(thread-sim VERSION 0.1.0 LANGUAGES CXX)
+project(thread-sim VERSION 0.1.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
