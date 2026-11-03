@@ -57,6 +57,7 @@ struct Thread
     uint32_t id = 0;
     SchedulingConfig requested_scheduling;
     ThreadAffinityConfig requested_affinity;
+    GROUP_AFFINITY initial_affinity{};
     bool suspended = false;
     std::atomic<bool> parked{false};
     std::atomic<DWORD> park_error{ERROR_SUCCESS};
@@ -203,9 +204,7 @@ class Execution
         {
             WaitForSingleObject(context_.stop_event(), options_.setup_delay_ms);
         }
-        // thread created in the foreground process starts with the foreground boost unless the process disables boosts,
-        // SetThreadPriorityBoost comes too late to remove it, so workers without boosts are created with process boosts
-        // off
+        // new threads start with the foreground boost, so workers without boosts are created with process boosts off
         BOOL process_boost_disabled = FALSE;
         const bool restore_process_boost = GetProcessPriorityBoost(GetCurrentProcess(), &process_boost_disabled) != FALSE;
         struct RestoreProcessBoost
@@ -399,6 +398,8 @@ class Execution
             return false;
         }
         thread.handle.reset(reinterpret_cast<HANDLE>(created));
+        // clearing a group affinity goes back to the group the thread started in
+        GetThreadGroupAffinity(thread.handle.get(), &thread.initial_affinity);
         thread.suspended = true;
         observed.thread_id = id;
         thread.id = id;
@@ -668,7 +669,7 @@ class Execution
 
     void State(Thread& thread, ThreadRunState state)
     {
-        // only acknowledgements wake the coordinator, short periods switch work/rest too often to sample each change
+        // only acknowledgements wake the coordinator, short periods switch too often to sample each change
         const ThreadRunState previous = thread.counters.state.exchange(state, std::memory_order_relaxed);
         if (previous != state && (state == ThreadRunState::kSuspending || state == ThreadRunState::kStopped || state == ThreadRunState::kFailed || previous == ThreadRunState::kSuspending))
         {
@@ -1081,8 +1082,7 @@ class Execution
         }
     }
 
-    // thread cycles use time stamp counter ticks, measure their rate against QPC, GetThreadTimes charges whole clock
-    // ticks and reports about half for 25ms bursts
+    // cycles are TSC ticks measured against QPC, GetThreadTimes reports about half of 25 ms bursts
     void MeasureCycleRate()
     {
         const int64_t now = QpcClock::Now();
@@ -1200,8 +1200,7 @@ class Execution
                 {
                     const int64_t now = QpcClock::Now();
                     observed.cycles_total = cycles;
-                    // samples just after start or acknowledgement are too short for a share, extend the interval until
-                    // a sample at least 50ms later
+                    // a sample right after start or an acknowledgement is too short, the interval runs to 50 ms at least
                     const bool long_enough = now - thread.last_qpc >= QpcClock::Frequency() / 20;
                     if (thread.last_cycles && long_enough)
                     {
@@ -1226,8 +1225,7 @@ class Execution
             }
             else if (!joining_)
             {
-                // threads ending during the run used no CPU in this interval, threads running to the end keep their
-                // last interval share
+                // threads that ended used no CPU here, threads that ran to the end keep their last share
                 observed.cycles_delta = 0;
                 if (base_.cycle_counter_hz)
                 {
@@ -1409,8 +1407,8 @@ class Execution
         {
             std::wstring value = AffinityModeKey(AffinityMode::kDefault);
             set(L"group_affinity", value, applied ? &applied->group_affinity : nullptr, [&] {
-                GROUP_AFFINITY group{};
-                if (!GetThreadGroupAffinity(GetCurrentThread(), &group))
+                GROUP_AFFINITY primary{};
+                if (!GetThreadGroupAffinity(GetCurrentThread(), &primary))
                 {
                     return platform::Status(platform::LastWin32Error(L"GetThreadGroupAffinity (process group)"));
                 }
@@ -1419,7 +1417,12 @@ class Execution
                 {
                     return platform::Status(platform::LastWin32Error(L"GetProcessAffinityMask"));
                 }
-                group.Mask = process_mask;
+                GROUP_AFFINITY group = thread->initial_affinity;
+                // the process mask covers only the primary group and is 0 once threads run in several groups
+                if (group.Group == primary.Group && process_mask)
+                {
+                    group.Mask = process_mask;
+                }
                 value = group_value({group.Group, group.Mask});
                 return status(SetThreadGroupAffinity(thread->handle.get(), &group, nullptr), L"SetThreadGroupAffinity");
             });

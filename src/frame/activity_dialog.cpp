@@ -70,19 +70,14 @@ class ActivityDialog final : public win32ui::DialogWindow
         SetAccessibleName(timer_, L"Waitable timer kind");
         SetAccessibleName(delay_, L"Start delay milliseconds");
         SetAccessibleName(wake_, L"Wake source");
-        for (const auto source : {engine::WakeSource::kTimer, engine::WakeSource::kEvent, engine::WakeSource::kWindowMessage})
-        {
-            SendMessageW(wake_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(engine::WakeSourceLabel(source)));
-        }
-        for (const auto kind : {engine::WaitableTimerKind::kDefault, engine::WaitableTimerKind::kHighResolution})
-        {
-            SendMessageW(timer_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(engine::WaitableTimerKindLabel(kind)));
-        }
+        win32ui::SetComboItems(wake_, {engine::WakeSourceLabel(engine::WakeSource::kTimer), engine::WakeSourceLabel(engine::WakeSource::kEvent), engine::WakeSourceLabel(engine::WakeSource::kWindowMessage)});
+        win32ui::SetComboItems(timer_, {engine::WaitableTimerKindLabel(engine::WaitableTimerKind::kDefault), engine::WaitableTimerKindLabel(engine::WaitableTimerKind::kHighResolution)});
         // engine returns item text, combo fits the widest item
         RECT combo = {};
         GetWindowRect(timer_, &combo);
-        SetWindowPos(timer_, nullptr, 0, 0, std::max<int>(combo.right - combo.left, win32ui::ComboFitWidth(timer_)), combo.bottom - combo.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-        SetWindowPos(wake_, nullptr, 0, 0, std::max<int>(combo.right - combo.left, win32ui::ComboFitWidth(timer_)), combo.bottom - combo.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        const int width = std::max({static_cast<int>(combo.right - combo.left), win32ui::ComboFitWidth(timer_), win32ui::ComboFitWidth(wake_)});
+        SetWindowPos(timer_, nullptr, 0, 0, width, combo.bottom - combo.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(wake_, nullptr, 0, 0, width, combo.bottom - combo.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         loading_ = true;
         SetTextIfChanged(work_, std::to_wstring(activity_.work_percent).c_str());
         SetTextIfChanged(period_, std::to_wstring(activity_.period_ms).c_str());

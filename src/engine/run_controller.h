@@ -85,7 +85,7 @@ struct ThreadPolicyRequest
     ThreadAffinityConfig affinity;
 };
 
-// shared by UI controller, coordinator and worker threads, only the coordinator calls Publish and SetRunOrigin
+// shared by the UI, coordinator and workers, only the coordinator calls Publish and SetRunOrigin
 class RunContext
 {
   public:
@@ -168,8 +168,7 @@ class Backend
   public:
     // coordinator destroys backend after Run, destructor must not throw
     virtual ~Backend() = default;
-    // runs on the coordinator, must publish transitions and honor stop promptly, must join all threads even on
-    // exceptions, then publish Completed or Failed
+    // runs on the coordinator, honors stop promptly, joins all threads even on exceptions, ends Completed or Failed
     virtual void Run(RunContext& context) = 0;
 };
 

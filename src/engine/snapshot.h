@@ -1,7 +1,7 @@
 // Copyright (C) 2026 nohuto
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// requested settings stay in RunConfig, OS outcomes in AppliedSettings, unavailable measurements stay empty, never zero
+// unavailable measurements stay empty, never zero
 
 #pragma once
 

@@ -5,6 +5,7 @@
 
 #include "platform/text.h"
 
+#include <win32ui/system/process_token.h>
 #include <win32ui/system/registry_value.h>
 #include <win32ui/system_api.h>
 
@@ -92,14 +93,12 @@ Environment QueryEnvironment()
     __cpuid(registers, 1);
     environment.hypervisor_present_cpuid = (static_cast<unsigned>(registers[2]) & (1u << 31)) != 0;
 
-    wchar_t name[MAX_COMPUTERNAME_LENGTH + 1] = {};
-    DWORD length = static_cast<DWORD>(std::size(name));
-    if (GetComputerNameW(name, &length))
+    if (const std::wstring& name = win32ui::ComputerName(); !name.empty())
     {
-        uint64_t hash = 1469598103934665603ull;
-        for (DWORD index = 0; index < length; ++index)
+        uint64_t hash = kHashBasis;
+        for (const wchar_t character : name)
         {
-            hash = (hash ^ static_cast<uint16_t>(name[index])) * 1099511628211ull;
+            hash = HashStep(hash, static_cast<uint16_t>(character));
         }
         environment.computer_name_hash = FormatHex(hash, 16);
     }

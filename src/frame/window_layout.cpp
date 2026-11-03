@@ -134,8 +134,7 @@ void MainWindow::Layout()
     GetClientRect(hwnd_, &client);
     const int width = client.right - client.left;
     const int height = client.bottom - client.top;
-    // move all children without redraw, then repaint once, avoids copying pixels from moved siblings and completes each
-    // resize frame
+    // children move without redraw and repaint once, so no pixels are copied from moved siblings
     const UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW;
     const int toolbar_height = settings_.show_toolbar ? win32ui::ToolbarHeight(toolbar_) : 0;
     SetWindowPos(toolbar_, nullptr, 0, 0, width, toolbar_height, flags);
@@ -163,10 +162,8 @@ void MainWindow::ShowBars()
 
 void MainWindow::OnDpiChanged(UINT dpi, const RECT* suggested)
 {
-    const UINT old_dpi = dpi_;
     dpi_ = dpi;
-    table_.Rescale(old_dpi, dpi_);
-    // refreshes the table too
+    // refreshes the table too, its columns follow the DPI
     ReplaceFonts(dpi_);
     win32ui::ApplySuggestedRect(hwnd_, suggested);
     Layout();

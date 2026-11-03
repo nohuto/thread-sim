@@ -63,7 +63,7 @@ T Load(std::span<const std::byte> bytes, size_t offset) noexcept
 Error RecordError(std::wstring_view kind, size_t offset, std::wstring_view detail)
 {
     std::wstring text(kind);
-    text += L" at offset " + FormatUnsigned(offset) + L": ";
+    text += L" at offset " + std::to_wstring(offset) + L": ";
     text += detail;
     return FormatError(kParseOperation, text);
 }
@@ -77,17 +77,17 @@ Result<std::vector<RawRecord>> SplitRecords(std::span<const std::byte> buffer, c
         const size_t remaining = buffer.size() - offset;
         if (remaining < layout.header_size)
         {
-            return RecordError(layout.kind, offset, L"only " + FormatUnsigned(remaining) + L" bytes remain for a " + FormatUnsigned(layout.header_size) + L"-byte header.");
+            return RecordError(layout.kind, offset, L"only " + std::to_wstring(remaining) + L" bytes remain for a " + std::to_wstring(layout.header_size) + L"-byte header.");
         }
         const auto tail = buffer.subspan(offset);
         const DWORD size = Load<DWORD>(tail, layout.size_offset);
         if (size < layout.header_size)
         {
-            return RecordError(layout.kind, offset, L"Size " + FormatUnsigned(size) + L" is smaller than the " + FormatUnsigned(layout.header_size) + L"-byte header.");
+            return RecordError(layout.kind, offset, L"Size " + std::to_wstring(size) + L" is smaller than the " + std::to_wstring(layout.header_size) + L"-byte header.");
         }
         if (size > remaining)
         {
-            return RecordError(layout.kind, offset, L"Size " + FormatUnsigned(size) + L" extends past the end of the buffer (" + FormatUnsigned(remaining) + L" bytes remain).");
+            return RecordError(layout.kind, offset, L"Size " + std::to_wstring(size) + L" extends past the end of the buffer (" + std::to_wstring(remaining) + L" bytes remain).");
         }
         records.push_back({offset, Load<DWORD>(tail, layout.type_offset), tail.first(size)});
         offset += size;
@@ -99,7 +99,7 @@ Status RequireBodySize(const RawRecord& record, size_t fixed_size, std::wstring_
 {
     if (record.bytes.size() < kInfoHeaderSize + fixed_size)
     {
-        return RecordError(kInfoLayout.kind, record.offset, L"Size " + FormatUnsigned(record.bytes.size()) + L" is smaller than the " + FormatUnsigned(kInfoHeaderSize + fixed_size) + L" bytes required for " + std::wstring(what) + L".");
+        return RecordError(kInfoLayout.kind, record.offset, L"Size " + std::to_wstring(record.bytes.size()) + L" is smaller than the " + std::to_wstring(kInfoHeaderSize + fixed_size) + L" bytes required for " + std::wstring(what) + L".");
     }
     return Status::Ok();
 }
@@ -110,7 +110,7 @@ Result<std::vector<GroupAffinity>> ReadGroupAffinities(const RawRecord& record, 
     const size_t needed = begin + count * sizeof(GROUP_AFFINITY);
     if (needed > record.bytes.size())
     {
-        return RecordError(kInfoLayout.kind, record.offset, FormatUnsigned(count) + L" group mask(s) need " + FormatUnsigned(needed) + L" bytes but Size is " + FormatUnsigned(record.bytes.size()) + L".");
+        return RecordError(kInfoLayout.kind, record.offset, std::to_wstring(count) + L" group mask(s) need " + std::to_wstring(needed) + L" bytes but Size is " + std::to_wstring(record.bytes.size()) + L".");
     }
     std::vector<GroupAffinity> masks;
     masks.reserve(count);
@@ -140,7 +140,7 @@ Status ParseProcessorRecord(const RawRecord& record, Topology& topology)
     {
         if (group_count != 1)
         {
-            return RecordError(kInfoLayout.kind, record.offset, L"a processor core must report exactly one group mask, not " + FormatUnsigned(group_count) + L".");
+            return RecordError(kInfoLayout.kind, record.offset, L"a processor core must report exactly one group mask, not " + std::to_wstring(group_count) + L".");
         }
         topology.cores.push_back({masks->front(), efficiency_class, (flags & LTP_PC_SMT) != 0});
     }
@@ -241,7 +241,7 @@ Status ParseGroupRecord(const RawRecord& record, Topology& topology)
     const size_t needed = body + kGroupFixedSize + static_cast<size_t>(active_groups) * sizeof(PROCESSOR_GROUP_INFO);
     if (needed > record.bytes.size())
     {
-        return RecordError(kInfoLayout.kind, record.offset, L"ActiveGroupCount " + FormatUnsigned(active_groups) + L" needs " + FormatUnsigned(needed) + L" bytes but Size is " + FormatUnsigned(record.bytes.size()) + L".");
+        return RecordError(kInfoLayout.kind, record.offset, L"ActiveGroupCount " + std::to_wstring(active_groups) + L" needs " + std::to_wstring(needed) + L" bytes but Size is " + std::to_wstring(record.bytes.size()) + L".");
     }
     for (WORD index = 0; index < active_groups; ++index)
     {
@@ -251,18 +251,18 @@ Status ParseGroupRecord(const RawRecord& record, Topology& topology)
         group.maximum_processor_count = Load<BYTE>(record.bytes, entry + offsetof(PROCESSOR_GROUP_INFO, MaximumProcessorCount));
         group.active_processor_count = Load<BYTE>(record.bytes, entry + offsetof(PROCESSOR_GROUP_INFO, ActiveProcessorCount));
         group.active_processor_mask = Load<uint64_t>(record.bytes, entry + offsetof(PROCESSOR_GROUP_INFO, ActiveProcessorMask));
-        const std::wstring label = L"Group " + FormatUnsigned(index);
+        const std::wstring label = L"Group " + std::to_wstring(index);
         if (group.maximum_processor_count > kMaxGroupProcessors)
         {
-            return RecordError(kInfoLayout.kind, record.offset, label + L" reports MaximumProcessorCount " + FormatUnsigned(group.maximum_processor_count) + L", above 64.");
+            return RecordError(kInfoLayout.kind, record.offset, label + L" reports MaximumProcessorCount " + std::to_wstring(group.maximum_processor_count) + L", above 64.");
         }
         if (static_cast<unsigned>(std::popcount(group.active_processor_mask)) != group.active_processor_count)
         {
-            topology.warnings.push_back(label + L" reports ActiveProcessorCount " + FormatUnsigned(group.active_processor_count) + L" but its active mask has " + FormatUnsigned(std::popcount(group.active_processor_mask)) + L" processors. Using the mask.");
+            topology.warnings.push_back(label + L" reports ActiveProcessorCount " + std::to_wstring(group.active_processor_count) + L" but its active mask has " + std::to_wstring(std::popcount(group.active_processor_mask)) + L" processors. Using the mask.");
         }
         if (group.maximum_processor_count < kMaxGroupProcessors && (group.active_processor_mask >> group.maximum_processor_count) != 0)
         {
-            topology.warnings.push_back(label + L" has active processors at or above MaximumProcessorCount " + FormatUnsigned(group.maximum_processor_count) + L".");
+            topology.warnings.push_back(label + L" has active processors at or above MaximumProcessorCount " + std::to_wstring(group.maximum_processor_count) + L".");
         }
         topology.groups.push_back(group);
     }
@@ -300,7 +300,7 @@ Status ParseLogicalProcessorRecords(std::span<const std::byte> buffer, Topology&
             status = ParseGroupRecord(record, topology);
             break;
         default:
-            topology.warnings.push_back(L"Skipped logical processor record with unknown Relationship " + FormatUnsigned(record.type) + L" at offset " + FormatUnsigned(record.offset) + L".");
+            topology.warnings.push_back(L"Skipped logical processor record with unknown Relationship " + std::to_wstring(record.type) + L" at offset " + std::to_wstring(record.offset) + L".");
             break;
         }
         if (!status)
@@ -378,15 +378,15 @@ void BuildProcessors(Topology& topology)
     }
     for (uint32_t index = 0; index < topology.cores.size(); ++index)
     {
-        AssignIndex(topology, std::span(&topology.cores[index].processors, 1), &LogicalProcessorInfo::core_record_index, index, L"Core " + FormatUnsigned(index));
+        AssignIndex(topology, std::span(&topology.cores[index].processors, 1), &LogicalProcessorInfo::core_record_index, index, L"Core " + std::to_wstring(index));
     }
     for (uint32_t index = 0; index < topology.packages.size(); ++index)
     {
-        AssignIndex(topology, topology.packages[index].processors, &LogicalProcessorInfo::package_record_index, index, L"Package " + FormatUnsigned(index));
+        AssignIndex(topology, topology.packages[index].processors, &LogicalProcessorInfo::package_record_index, index, L"Package " + std::to_wstring(index));
     }
     for (const auto& node : topology.numa_nodes)
     {
-        AssignIndex(topology, node.processors, &LogicalProcessorInfo::numa_node_number, node.node_number, L"NUMA node " + FormatUnsigned(node.node_number));
+        AssignIndex(topology, node.processors, &LogicalProcessorInfo::numa_node_number, node.node_number, L"NUMA node " + std::to_wstring(node.node_number));
     }
     for (uint32_t index = 0; index < topology.caches.size(); ++index)
     {
@@ -403,7 +403,7 @@ void BuildProcessors(Topology& topology)
         });
         if (!all_active)
         {
-            topology.warnings.push_back(L"Cache " + FormatUnsigned(index) + L" (L" + FormatUnsigned(cache.level) + L") lists processors that are not active in any group.");
+            topology.warnings.push_back(L"Cache " + std::to_wstring(index) + L" (L" + std::to_wstring(cache.level) + L") lists processors that are not active in any group.");
         }
     }
 }
@@ -419,12 +419,12 @@ Status ParseCpuSetRecords(std::span<const std::byte> buffer, Topology& topology)
     {
         if (record.type != CpuSetInformation)
         {
-            topology.warnings.push_back(L"Skipped CPU Set record with unknown Type " + FormatUnsigned(record.type) + L" at offset " + FormatUnsigned(record.offset) + L".");
+            topology.warnings.push_back(L"Skipped CPU Set record with unknown Type " + std::to_wstring(record.type) + L" at offset " + std::to_wstring(record.offset) + L".");
             continue;
         }
         if (record.bytes.size() < kCpuSetRecordSize)
         {
-            return RecordError(kCpuSetLayout.kind, record.offset, L"Size " + FormatUnsigned(record.bytes.size()) + L" is smaller than the " + FormatUnsigned(kCpuSetRecordSize) + L" bytes required for CpuSetInformation.");
+            return RecordError(kCpuSetLayout.kind, record.offset, L"Size " + std::to_wstring(record.bytes.size()) + L" is smaller than the " + std::to_wstring(kCpuSetRecordSize) + L" bytes required for CpuSetInformation.");
         }
         const auto& bytes = record.bytes;
         CpuSetInfo set;
@@ -444,7 +444,7 @@ Status ParseCpuSetRecords(std::span<const std::byte> buffer, Topology& topology)
         set.realtime = (flags & SYSTEM_CPU_SET_INFORMATION_REALTIME) != 0;
         if (topology.FindCpuSet(set.id))
         {
-            topology.warnings.push_back(L"Skipped duplicate CPU Set ID " + FormatHex(set.id) + L" at offset " + FormatUnsigned(record.offset) + L".");
+            topology.warnings.push_back(L"Skipped duplicate CPU Set ID " + FormatHex(set.id) + L" at offset " + std::to_wstring(record.offset) + L".");
             continue;
         }
         topology.cpu_sets.push_back(set);
@@ -558,6 +558,8 @@ Result<RecordBuffer> QuerySystemCpuSetRecords()
     return InternalError(L"GetSystemCpuSetInformation", L"Required size kept growing across retries.");
 }
 
+}
+
 Result<std::vector<uint32_t>> QueryProcessDefaultCpuSets()
 {
     std::vector<ULONG> ids;
@@ -580,8 +582,6 @@ Result<std::vector<uint32_t>> QueryProcessDefaultCpuSets()
         ids.assign(required, 0);
     }
     return InternalError(L"GetProcessDefaultCpuSets", L"Required count kept growing across retries.");
-}
-
 }
 
 const LogicalProcessorInfo* Topology::FindProcessor(ProcessorNumber id) const noexcept
@@ -783,7 +783,7 @@ Result<uint64_t> ParseMaskList(std::wstring_view text, uint8_t maximum_processor
         }
         if (*last >= limit)
         {
-            return ValidationError(kOperation, L"Processor " + FormatUnsigned(*last) + L" is out of range. The group has " + FormatUnsigned(limit) + L" processor(s).");
+            return ValidationError(kOperation, L"Processor " + std::to_wstring(*last) + L" is out of range. The group has " + std::to_wstring(limit) + L" processor(s).");
         }
         mask |= RangeMask(static_cast<unsigned>(*first), static_cast<unsigned>(*last));
         if (comma == std::wstring_view::npos)

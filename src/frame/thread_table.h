@@ -68,7 +68,6 @@ class ThreadTable
     std::vector<int> ColumnWidthsDip(UINT dpi) const;
     void SetColumnWidths(const std::vector<int>& widths_dip, UINT dpi);
     void ResetColumns(UINT dpi);
-    void Rescale(UINT old_dpi, UINT new_dpi);
     std::wstring CellText(int thread, TableColumn column) const;
     int CheckBoxAt(POINT point) const;
     void RedrawCheckBoxes(const std::vector<uint32_t>& threads);

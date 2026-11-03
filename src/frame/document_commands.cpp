@@ -200,7 +200,7 @@ void MainWindow::ExportResults()
     int existing_count = 0;
     for (const std::wstring& path : {base + L".csv", base + L".json"})
     {
-        if (!win32ui::EqualsInsensitive(path, *chosen) && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES)
+        if (!win32ui::EqualsInsensitive(path, *chosen) && !win32ui::IsMissing(path.c_str()))
         {
             existing += (existing.empty() ? L"" : L" and ") + win32ui::FileName(path);
             ++existing_count;

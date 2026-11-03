@@ -6,6 +6,7 @@
 #include "platform/clock.h"
 #include "platform/text.h"
 
+#include <win32ui/handle_owner.h>
 #include <win32ui/system/paths.h>
 
 #include <algorithm>
@@ -166,13 +167,12 @@ void ProcessThreadSampler::ReadName(CachedThread& cached, OtherThreadSnapshot& s
 {
     if (!cached.has_description || now - cached.description_qpc >= 3 * platform::QpcClock::Frequency())
     {
-        PWSTR description = nullptr;
-        const HRESULT hr = GetThreadDescription(cached.handle.get(), &description);
-        const std::unique_ptr<wchar_t, decltype(&LocalFree)> owned(description, &LocalFree);
+        win32ui::UniqueLocal<PWSTR> description;
+        const HRESULT hr = GetThreadDescription(cached.handle.get(), description.put());
         if (SUCCEEDED(hr))
         {
-            cached.has_description = description && *description;
-            cached.name = cached.has_description ? description : L"";
+            cached.has_description = description && *description.get();
+            cached.name = cached.has_description ? description.get() : L"";
         }
         else
         {

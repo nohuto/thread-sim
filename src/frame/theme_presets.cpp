@@ -9,6 +9,7 @@
 #include "ui/theme.h"
 
 #include <win32ui/dialog/text_prompt.h>
+#include <win32ui/system/paths.h>
 #include <win32ui/theme/preset_editor.h>
 
 namespace thread_sim::frame
@@ -38,7 +39,7 @@ void ShowPresetProblem(HWND owner, std::wstring_view message, const std::wstring
 
 std::wstring MainWindow::ThemePresetsPath() const
 {
-    return environment_.data_dir.empty() ? std::wstring() : environment_.data_dir + L"\\" + kPresetFile;
+    return environment_.data_dir.empty() ? std::wstring() : win32ui::JoinPath(environment_.data_dir, kPresetFile);
 }
 
 void MainWindow::LoadThemePresets()

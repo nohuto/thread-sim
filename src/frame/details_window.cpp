@@ -220,8 +220,8 @@ void DetailsWindow::Show(const DetailsContent& content)
         rows.push_back({L"CPU time", L"", L"", cycle_seconds ? platform::FormatFixed(*cycle_seconds, 3) + L" s" : std::wstring()});
         rows.push_back({L"User, kernel time", L"", L"", observed->user_time_100ns && observed->kernel_time_100ns ? Seconds(*observed->user_time_100ns) + L", " + Seconds(*observed->kernel_time_100ns) : std::wstring()});
         rows.push_back({L"CPU %", L"", L"", observed->cpu_percent_one_logical_processor ? platform::FormatFixed(*observed->cpu_percent_one_logical_processor, 1) + L" %" : std::wstring()});
-        rows.push_back({L"Cycles", L"", L"", observed->cycles_total ? platform::FormatUnsigned(*observed->cycles_total) : std::wstring()});
-        rows.push_back({L"Context switches", L"", L"", sample && sample->context_switches ? platform::FormatUnsigned(*sample->context_switches) : std::wstring()});
+        rows.push_back({L"Cycles", L"", L"", observed->cycles_total ? std::to_wstring(*observed->cycles_total) : std::wstring()});
+        rows.push_back({L"Context switches", L"", L"", sample && sample->context_switches ? std::to_wstring(*sample->context_switches) : std::wstring()});
         rows.push_back({L"Live changes", L"", L"", observed->live_change_count ? std::to_wstring(observed->live_change_count) : std::wstring()});
         // engine counts periods only for threads that rest between work windows
         if (requested.activity.work_percent < 100)

@@ -15,8 +15,7 @@ namespace thread_sim::platform
 inline constexpr uint64_t kMaxConfigFileBytes = 4ull * 1024ull * 1024ull;
 
 Result<std::wstring> ReadUtf8File(const std::wstring& path, uint64_t max_bytes = kMaxConfigFileBytes);
-Status WriteFileAtomic(const std::wstring& path, std::string_view bytes);
-Status WriteUtf8FileAtomic(const std::wstring& path, std::wstring_view text);
+Status WriteUtf8FileAtomic(const std::wstring& path, std::wstring_view text, bool bom = false);
 Status EnsureDirectory(const std::wstring& path);
 std::wstring DefaultDataDirectory();
 

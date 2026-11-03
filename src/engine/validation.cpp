@@ -63,7 +63,9 @@ void ValidateThreadAffinity(size_t index, const ThreadAffinityConfig& affinity_c
                 out.Thread(thread, Field::kGroupAffinityMask, L"Select at least one logical processor for group affinity.");
                 break;
             }
-            if (affinity_config.group_affinity.group != process.group || (affinity_config.group_affinity.mask & ~process.affinity) != 0)
+            // a process mask below its whole group pins every thread there, otherwise any group is open
+            const bool restricted = process.affinity && process.affinity != process.system_affinity;
+            if (restricted && (affinity_config.group_affinity.group != process.group || (affinity_config.group_affinity.mask & ~process.affinity) != 0))
             {
                 out.Thread(thread, Field::kGroupAffinityMask, L"Outside the process affinity.");
             }

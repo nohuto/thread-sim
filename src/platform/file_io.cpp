@@ -5,7 +5,6 @@
 
 #include <win32ui/system/file_io.h>
 #include <win32ui/system/paths.h>
-#include <win32ui/system/strings.h>
 
 #include <shlobj.h>
 
@@ -28,20 +27,17 @@ Result<std::wstring> ReadUtf8File(const std::wstring& path, uint64_t max_bytes)
     }
 }
 
-Status WriteFileAtomic(const std::wstring& path, std::string_view bytes)
+Status WriteUtf8FileAtomic(const std::wstring& path, std::wstring_view text, bool bom)
 {
-    const DWORD code = win32ui::WriteFileAtomic(path.c_str(), bytes);
-    return code == ERROR_SUCCESS ? Status::Ok() : Status(Win32Error(code, L"Write file").WithContext(path));
-}
-
-Status WriteUtf8FileAtomic(const std::wstring& path, std::wstring_view text)
-{
-    const std::optional<std::string> bytes = win32ui::WideToUtf8(text);
-    if (!bytes)
+    switch (const DWORD code = win32ui::WriteTextFileAtomic(path.c_str(), text, bom ? win32ui::TextEncoding::utf8_bom : win32ui::TextEncoding::utf8))
     {
+    case ERROR_SUCCESS:
+        return Status::Ok();
+    case ERROR_NO_UNICODE_TRANSLATION:
         return FormatError(L"Encode UTF-8", L"The text contains invalid UTF-16.").WithContext(path);
+    default:
+        return Win32Error(code, L"Write file").WithContext(path);
     }
-    return WriteFileAtomic(path, *bytes);
 }
 
 Status EnsureDirectory(const std::wstring& path)

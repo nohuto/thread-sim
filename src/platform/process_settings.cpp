@@ -3,6 +3,8 @@
 
 #include "platform/process_settings.h"
 
+#include "platform/topology.h"
+
 #include <limits>
 
 namespace thread_sim::platform
@@ -30,26 +32,13 @@ Result<ProcessSettings> QueryProcessSettings()
     }
     settings.affinity = process_mask;
     settings.system_affinity = system_mask;
-    for (unsigned attempt = 0; attempt < 4; ++attempt)
+    Result<std::vector<uint32_t>> ids = QueryProcessDefaultCpuSets();
+    if (!ids)
     {
-        ULONG count = 0;
-        if (!GetProcessDefaultCpuSets(GetCurrentProcess(), nullptr, 0, &count) && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-        {
-            return LastWin32Error(L"GetProcessDefaultCpuSets");
-        }
-        std::vector<ULONG> ids(count);
-        if (!count || GetProcessDefaultCpuSets(GetCurrentProcess(), ids.data(), count, &count))
-        {
-            ids.resize(count);
-            settings.default_cpu_set_ids.assign(ids.begin(), ids.end());
-            return settings;
-        }
-        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-        {
-            return LastWin32Error(L"GetProcessDefaultCpuSets");
-        }
+        return std::move(ids).error();
     }
-    return InternalError(L"GetProcessDefaultCpuSets", L"Process CPU Sets kept changing during the query.");
+    settings.default_cpu_set_ids = std::move(ids).value();
+    return settings;
 }
 
 Status SetProcessPriorityClassValue(DWORD priority_class)

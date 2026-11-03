@@ -526,11 +526,11 @@ TopologyFingerprint FingerprintOf(const platform::Topology& topology)
         fingerprint.group_masks.push_back(group.active_processor_mask);
     }
     fingerprint.cpu_set_count = static_cast<uint32_t>(topology.cpu_sets.size());
-    uint64_t hash = 1469598103934665603ull;
+    uint64_t hash = platform::kHashBasis;
     auto mix = [&](uint64_t value) {
         for (int byte = 0; byte < 8; ++byte)
         {
-            hash = (hash ^ ((value >> (byte * 8)) & 0xFF)) * 1099511628211ull;
+            hash = platform::HashStep(hash, (value >> (byte * 8)) & 0xFF);
         }
     };
     for (const auto& set : topology.cpu_sets)

@@ -931,8 +931,7 @@ void MainWindow::ShowDetails()
     {
         if (window->thread_key() == key)
         {
-            ShowWindow(window->window(), SW_SHOWNORMAL);
-            SetForegroundWindow(window->window());
+            win32ui::BringToFront(window->window());
             return;
         }
     }
@@ -1940,7 +1939,7 @@ void MainWindow::SampleOtherThreads()
     const int64_t start = platform::QpcClock::Now();
     if (auto sampled = other_sampler_.Sample({}))
     {
-        perf_.Event("other_threads_query", ElapsedMs(start), "nt_query_us", other_sampler_.last_query_ticks() * 1000000 / platform::QpcClock::Frequency());
+        perf_.Event("other_threads_query", ElapsedMs(start), "nt_query_us", platform::QpcClock::TicksToMicroseconds(other_sampler_.last_query_ticks()));
         table_.SetOtherThreads(std::make_shared<const std::vector<engine::OtherThreadSnapshot>>(std::move(sampled).value()));
         table_.RefreshVisible(true);
         UpdateStatus();

@@ -78,11 +78,12 @@ class PickerDialog final : public win32ui::DialogWindow
         if (group_)
         {
             SetAccessibleName(group_, L"Processor group");
+            std::vector<std::wstring> texts;
             for (const auto& group : topology_.groups)
             {
-                const std::wstring text = L"Group " + std::to_wstring(group.index) + L", " + std::to_wstring(group.active_processor_count) + L" active processors";
-                SendMessageW(group_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text.c_str()));
+                texts.push_back(L"Group " + std::to_wstring(group.index) + L", " + std::to_wstring(group.active_processor_count) + L" active processors");
             }
+            win32ui::SetComboItems(group_, texts);
         }
         list_ = GetDlgItem(hwnd(), ids::kPickerList);
         if (!multi)
@@ -109,10 +110,7 @@ class PickerDialog final : public win32ui::DialogWindow
                 group_index = static_cast<int>(index);
             }
         }
-        if (group_)
-        {
-            SendMessageW(group_, CB_SETCURSEL, static_cast<WPARAM>(group_index), 0);
-        }
+        win32ui::SetComboIndex(group_, group_index);
         Populate();
     }
 

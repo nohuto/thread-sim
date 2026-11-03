@@ -71,9 +71,7 @@ enum class ActivityLevel : uint8_t
     kCustom,
 };
 
-// periods start at run origin + k * period_ms, work fills work_percent of each period, a waitable timer waits for the
-// next period, 100 percent runs without waits, a start delay holds the thread after the run starts, its first period is
-// the one containing the release
+// periods start at origin + k * period_ms, a delayed thread starts in the period of its release
 struct ActivityConfig
 {
     uint32_t work_percent = 100;

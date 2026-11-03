@@ -99,7 +99,7 @@ std::wstring OtherText(const engine::OtherThreadSnapshot& thread, TableColumn co
         // use GetThreadTimes without a run counter rate to convert cycles
         return thread.user_time_100ns && thread.kernel_time_100ns ? platform::FormatFixed(static_cast<double>(*thread.user_time_100ns + *thread.kernel_time_100ns) / 1e7, 3) : std::wstring();
     case TableColumn::kContextSwitches:
-        return sample && sample->context_switches ? platform::FormatUnsigned(*sample->context_switches) : std::wstring();
+        return sample && sample->context_switches ? std::to_wstring(*sample->context_switches) : std::wstring();
     default:
         return {};
     }
@@ -481,7 +481,7 @@ std::wstring ThreadTable::CellText(int thread, TableColumn column) const
         }
         return {};
     case TableColumn::kContextSwitches:
-        return sample && sample->context_switches ? platform::FormatUnsigned(*sample->context_switches) : std::wstring();
+        return sample && sample->context_switches ? std::to_wstring(*sample->context_switches) : std::wstring();
     default:
         return {};
     }
@@ -754,14 +754,6 @@ void ThreadTable::ResetColumns(UINT dpi)
 {
     ApplyColumns(DefaultWidths(dpi), dpi);
     ApplyColumnOrder();
-}
-
-void ThreadTable::Rescale(UINT old_dpi, UINT new_dpi)
-{
-    for (size_t column = 0; column < kColumnCount; ++column)
-    {
-        ListView_SetColumnWidth(list_, static_cast<int>(column), MulDiv(ListView_GetColumnWidth(list_, static_cast<int>(column)), static_cast<int>(new_dpi), static_cast<int>(old_dpi)));
-    }
 }
 
 }

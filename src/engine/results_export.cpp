@@ -10,6 +10,7 @@
 #include "platform/text.h"
 
 #include <win32ui/json/writer.h>
+#include <win32ui/system/file_io.h>
 #include <win32ui/system/strings.h>
 
 namespace thread_sim::engine
@@ -19,7 +20,6 @@ namespace
 {
 
 using platform::FormatFixed;
-using platform::FormatUnsigned;
 
 // column names and units are stable
 constexpr const wchar_t* kColumns[] = {
@@ -145,7 +145,7 @@ std::wstring Ids(const std::vector<uint32_t>& ids)
     std::wstring text;
     for (size_t index = 0; index < ids.size(); ++index)
     {
-        text += (index ? L" " : L"") + FormatUnsigned(ids[index]);
+        text += (index ? L" " : L"") + std::to_wstring(ids[index]);
     }
     return text;
 }
@@ -188,7 +188,7 @@ void WriteOptional(win32ui::JsonWriter& writer, std::wstring_view key, const std
 
 void AppendLatency(std::vector<std::wstring>& row, const std::optional<LatencySummary>& latency)
 {
-    row.push_back(latency ? FormatUnsigned(latency->count) : L"");
+    row.push_back(latency ? std::to_wstring(latency->count) : L"");
     const bool measured = latency && latency->count > 0;
     row.push_back(measured ? std::to_wstring(latency->p50_us) : L"");
     row.push_back(measured ? std::to_wstring(latency->p99_us) : L"");
@@ -276,14 +276,14 @@ std::wstring BuildThreadResultsCsv(const ExportInput& input)
         std::vector<std::wstring> row;
         row.push_back(snapshot.run_id);
         row.push_back(Number(snapshot.requested_duration_s));
-        row.push_back(FormatUnsigned(index));
+        row.push_back(std::to_wstring(index));
         row.push_back(thread.name);
         row.push_back(thread.active ? L"true" : L"false");
         const ThreadSample* sample = observed && observed->sample ? &*observed->sample : nullptr;
         const AppliedSettings* applied = observed ? &observed->applied : nullptr;
         const wchar_t* state_name = sample && sample->thread_state ? ThreadStateName(*sample->thread_state) : nullptr;
         const wchar_t* reason_name = sample && sample->wait_reason ? WaitReasonName(*sample->wait_reason, build) : nullptr;
-        row.push_back(observed && observed->thread_id ? FormatUnsigned(observed->thread_id) : L"");
+        row.push_back(observed && observed->thread_id ? std::to_wstring(observed->thread_id) : L"");
         row.push_back(observed ? ThreadRunStateKey(observed->state) : L"");
         row.push_back(sample ? Number(sample->thread_state) : L"");
         row.push_back(state_name ? state_name : L"");
@@ -303,27 +303,27 @@ std::wstring BuildThreadResultsCsv(const ExportInput& input)
         row.push_back(applied && applied->priority_boost_disabled_readback ? (*applied->priority_boost_disabled_readback ? L"true" : L"false") : L"");
         row.push_back(AffinityModeKey(affinity_config.mode));
         const bool affinity = affinity_config.mode == AffinityMode::kGroupAffinity;
-        row.push_back(affinity ? FormatUnsigned(affinity_config.group_affinity.group) : L"");
+        row.push_back(affinity ? std::to_wstring(affinity_config.group_affinity.group) : L"");
         row.push_back(affinity ? Mask(affinity_config.group_affinity.mask) : L"");
         row.push_back(affinity ? platform::FormatMaskList(affinity_config.group_affinity.mask) : L"");
         row.push_back(affinity_config.mode == AffinityMode::kCpuSets ? Ids(affinity_config.selected_cpu_set_ids) : L"");
         row.push_back(applied ? OkText(applied->group_affinity) : L"");
         row.push_back(applied ? OkText(applied->selected_cpu_sets) : L"");
         const bool group_affinity_readback = applied && applied->group_affinity_readback;
-        row.push_back(group_affinity_readback ? FormatUnsigned(applied->group_affinity_readback->group) : L"");
+        row.push_back(group_affinity_readback ? std::to_wstring(applied->group_affinity_readback->group) : L"");
         row.push_back(group_affinity_readback ? Mask(applied->group_affinity_readback->mask) : L"");
         row.push_back(group_affinity_readback ? platform::FormatMaskList(applied->group_affinity_readback->mask) : L"");
         row.push_back(applied && applied->selected_cpu_set_ids_readback ? Ids(*applied->selected_cpu_set_ids_readback) : L"");
-        row.push_back(affinity_config.ideal_processor_enabled ? FormatUnsigned(affinity_config.ideal_processor.group) : L"");
-        row.push_back(affinity_config.ideal_processor_enabled ? FormatUnsigned(affinity_config.ideal_processor.number) : L"");
+        row.push_back(affinity_config.ideal_processor_enabled ? std::to_wstring(affinity_config.ideal_processor.group) : L"");
+        row.push_back(affinity_config.ideal_processor_enabled ? std::to_wstring(affinity_config.ideal_processor.number) : L"");
         row.push_back(applied ? OkText(applied->ideal_processor) : L"");
-        row.push_back(applied && applied->ideal_processor_readback ? FormatUnsigned(applied->ideal_processor_readback->group) : L"");
-        row.push_back(applied && applied->ideal_processor_readback ? FormatUnsigned(applied->ideal_processor_readback->number) : L"");
+        row.push_back(applied && applied->ideal_processor_readback ? std::to_wstring(applied->ideal_processor_readback->group) : L"");
+        row.push_back(applied && applied->ideal_processor_readback ? std::to_wstring(applied->ideal_processor_readback->number) : L"");
         row.push_back(ActivityLevelKey(ActivityLevelOf(thread.activity)));
-        row.push_back(FormatUnsigned(thread.activity.work_percent));
-        row.push_back(relevance.period ? FormatUnsigned(thread.activity.period_ms) : L"");
+        row.push_back(std::to_wstring(thread.activity.work_percent));
+        row.push_back(relevance.period ? std::to_wstring(thread.activity.period_ms) : L"");
         row.push_back(relevance.waitable_timer_kind ? WaitableTimerKindKey(thread.activity.waitable_timer_kind) : L"");
-        row.push_back(FormatUnsigned(thread.activity.start_delay_ms));
+        row.push_back(std::to_wstring(thread.activity.start_delay_ms));
         row.push_back(relevance.wake_source ? WakeSourceKey(thread.activity.wake_source) : L"");
         row.push_back(applied && applied->obtained_waitable_timer_kind ? WaitableTimerKindKey(*applied->obtained_waitable_timer_kind) : L"");
         row.push_back(observed ? Number(observed->user_time_100ns) : L"");
@@ -349,7 +349,7 @@ std::wstring BuildThreadResultsCsv(const ExportInput& input)
         row.push_back(applied && applied->readback_error ? applied->readback_error->Describe() : L"");
         row.push_back(observed && observed->warning ? *observed->warning : L"");
         row.push_back(observed && observed->error ? observed->error->Describe() : L"");
-        row.push_back(observed ? FormatUnsigned(observed->live_change_count) : L"");
+        row.push_back(observed ? std::to_wstring(observed->live_change_count) : L"");
         for (size_t column = 0; column < row.size(); ++column)
         {
             csv += (column ? L"," : L"") + win32ui::CsvField(row[column]);
@@ -600,12 +600,40 @@ std::wstring BuildRunMetadataJson(const ExportInput& input)
 
 platform::Status ExportResults(const std::wstring& base_path, const ExportInput& input)
 {
-    const std::string csv = "\xEF\xBB\xBF" + win32ui::WideToMultiByte(BuildThreadResultsCsv(input), CP_UTF8);
-    if (platform::Status status = platform::WriteFileAtomic(base_path + L".csv", csv); !status)
+    const std::wstring csv_path = base_path + L".csv";
+    // the previous CSV stays aside until the JSON is written, so a failure leaves the pair of one run
+    const std::wstring aside = csv_path + win32ui::RandomFileSuffix(L".bak");
+    const DWORD attributes = GetFileAttributesW(csv_path.c_str());
+    // a directory isnt a previous export, the write below fails on it
+    const bool directory = attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY);
+    const bool moved = !directory && MoveFileExW(csv_path.c_str(), aside.c_str(), 0) != FALSE;
+    if (const DWORD error = GetLastError(); !directory && !moved && error != ERROR_FILE_NOT_FOUND)
     {
-        return status;
+        return platform::Win32Error(error, L"Write file").WithContext(csv_path);
     }
-    return platform::WriteUtf8FileAtomic(base_path + L".json", BuildRunMetadataJson(input));
+    platform::Status status = platform::WriteUtf8FileAtomic(csv_path, BuildThreadResultsCsv(input), true);
+    const bool csv_written = static_cast<bool>(status);
+    if (status)
+    {
+        status = platform::WriteUtf8FileAtomic(base_path + L".json", BuildRunMetadataJson(input));
+    }
+    if (status)
+    {
+        if (moved)
+        {
+            DeleteFileW(aside.c_str());
+        }
+    }
+    else if (moved && !MoveFileExW(aside.c_str(), csv_path.c_str(), MOVEFILE_REPLACE_EXISTING))
+    {
+        // the new CSV stays, the error names where the previous one is
+        return platform::LastWin32Error(L"Restore the previous CSV").WithContext(aside);
+    }
+    else if (csv_written)
+    {
+        DeleteFileW(csv_path.c_str());
+    }
+    return status;
 }
 
 }

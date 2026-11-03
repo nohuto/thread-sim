@@ -199,7 +199,8 @@ platform::Status SaveUiSettings(const std::wstring& path, const UiSettings& sett
         writer.Signed({}, std::clamp(width, 0, 4000));
     }
     writer.EndArray();
-    writer.String(L"last_directory", settings.last_directory);
+    // reader refuses the whole file above 4096
+    writer.String(L"last_directory", settings.last_directory.size() <= 4096 ? settings.last_directory : std::wstring());
     writer.Bool(L"show_all_threads", settings.show_all_threads);
     writer.Bool(L"show_grid_lines", settings.show_grid_lines);
     writer.Bool(L"show_toolbar", settings.show_toolbar);

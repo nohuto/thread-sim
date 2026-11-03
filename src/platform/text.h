@@ -6,7 +6,6 @@
 #include <win32ui/system/strings.h>
 
 #include <cstdint>
-#include <string>
 
 namespace thread_sim::platform
 {
@@ -16,6 +15,11 @@ using win32ui::FormatHex;
 using win32ui::ParseUnsigned;
 using win32ui::Utf8ToWide;
 
-std::wstring FormatUnsigned(uint64_t value);
+// basis one digit short of the FNV-1a standard, saved hashes depend on it
+inline constexpr uint64_t kHashBasis = 1469598103934665603ull;
+constexpr uint64_t HashStep(uint64_t hash, uint64_t piece) noexcept
+{
+    return (hash ^ piece) * 1099511628211ull;
+}
 
 }

@@ -4,7 +4,6 @@ thread_sim_add_library(thread_sim_platform
     environment.cpp
     error.cpp
     file_io.cpp
-    text.cpp
     topology.cpp
 )
 target_link_libraries(thread_sim_platform PUBLIC

@@ -121,6 +121,7 @@ struct Topology
 };
 
 Result<Topology> QueryTopology();
+Result<std::vector<uint32_t>> QueryProcessDefaultCpuSets();
 
 Result<Topology> ParseTopology(std::span<const std::byte> logical_processor_information_ex, std::span<const std::byte> cpu_set_information, std::span<const uint32_t> process_default_cpu_set_ids, bool cpu_sets_known, bool process_defaults_known);
 
